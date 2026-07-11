@@ -1,93 +1,64 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-
-<title>Lector NFC Senshi-Kan</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lector NFC</title>
 
 <style>
-
 body{
-    margin:0;
-    padding:0;
-    background:#111;
-    color:white;
-    font-family:Arial,Helvetica,sans-serif;
+    font-family:Arial,sans-serif;
+    background:#202124;
+    color:#fff;
     display:flex;
     justify-content:center;
     align-items:center;
     height:100vh;
+    margin:0;
 }
 
-.contenedor{
-
-    width:420px;
+.container{
     text-align:center;
-
-}
-
-h1{
-
-    margin-bottom:30px;
-
+    width:90%;
+    max-width:400px;
 }
 
 input{
-
     width:100%;
     padding:15px;
-    font-size:28px;
+    font-size:24px;
     text-align:center;
-    box-sizing:border-box;
+    margin-top:20px;
+}
 
+button{
+    margin-top:20px;
+    padding:15px 30px;
+    font-size:20px;
 }
 
 #estado{
-
-    margin-top:25px;
+    margin-top:20px;
     font-size:22px;
     font-weight:bold;
-
 }
-
-.ok{
-
-    color:#00d84a;
-
-}
-
-.error{
-
-    color:#ff5050;
-
-}
-
-.esperando{
-
-    color:#ffc107;
-
-}
-
 </style>
 
 </head>
-
 <body>
 
-<div class="contenedor">
+<div class="container">
 
 <h1>Lector NFC</h1>
 
-<input
-id="txtID"
-type="text"
-readonly
-placeholder="Esperando tarjeta...">
+<input id="txtID" readonly placeholder="Esperando tarjeta">
 
-<div id="estado" class="esperando">
-Inicializando lector...
+<button id="btnIniciar">
+Iniciar lector NFC
+</button>
+
+<div id="estado">
+Esperando...
 </div>
 
 </div>
@@ -96,38 +67,29 @@ Inicializando lector...
 
 const txt=document.getElementById("txtID");
 const estado=document.getElementById("estado");
+const boton=document.getElementById("btnIniciar");
 
-window.addEventListener("load", iniciarNFC);
+let ndef;
+
+boton.addEventListener("click", iniciarNFC);
 
 async function iniciarNFC(){
 
-    if(!("NDEFReader" in window)){
-
-        estado.className="error";
-        estado.innerHTML="Este dispositivo no soporta Web NFC.";
-        return;
-
-    }
-
     try{
 
-        const ndef=new NDEFReader();
+        ndef=new NDEFReader();
 
         await ndef.scan();
 
-        estado.className="esperando";
-        estado.innerHTML="📡 Acerque una tarjeta NFC";
+        boton.style.display="none";
 
-        ndef.onreading=(event)=>{
+        estado.innerHTML="📡 Acerque una tarjeta";
 
-            leerTarjeta(event);
+        ndef.onreading=leer;
 
-        };
+        ndef.onreadingerror=function(){
 
-        ndef.onreadingerror=()=>{
-
-            estado.className="error";
-            estado.innerHTML="Error al leer la tarjeta.";
+            estado.innerHTML="Error de lectura";
 
         };
 
@@ -135,7 +97,6 @@ async function iniciarNFC(){
 
     catch(e){
 
-        estado.className="error";
         estado.innerHTML=e.message;
 
         console.error(e);
@@ -144,75 +105,62 @@ async function iniciarNFC(){
 
 }
 
-function leerTarjeta(event){
+function leer(event){
 
-    let contenido="";
+    let texto="";
 
     const decoder=new TextDecoder();
 
     for(const record of event.message.records){
 
-        switch(record.recordType){
+        if(record.recordType==="text"){
 
-            case "text":
-
-                contenido=decoder.decode(record.data);
-                break;
-
-            case "url":
-
-                contenido=decoder.decode(record.data);
-                break;
-
-            default:
-
-                contenido=decoder.decode(record.data);
+            texto=decoder.decode(record.data);
 
         }
 
     }
 
-    txt.value=contenido;
+    txt.value=texto;
 
-    estado.className="ok";
     estado.innerHTML="✅ RECIBIDO";
 
     beep();
 
-    setTimeout(()=>{
+    setTimeout(function(){
 
-        estado.className="esperando";
-        estado.innerHTML="📡 Acerque una tarjeta NFC";
+        estado.innerHTML="📡 Acerque otra tarjeta";
 
-    },2000);
+    },1500);
 
 }
 
 function beep(){
 
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=new AudioContext();
 
     const osc=ctx.createOscillator();
 
     const gain=ctx.createGain();
 
-    osc.type="sine";
     osc.frequency.value=900;
 
     osc.connect(gain);
+
     gain.connect(ctx.destination);
 
     osc.start();
 
-    gain.gain.setValueAtTime(0.2,ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.20);
+    gain.gain.exponentialRampToValueAtTime(
+        0.00001,
+        ctx.currentTime+0.15
+    );
 
-    osc.stop(ctx.currentTime+0.20);
+    osc.stop(ctx.currentTime+0.15);
 
 }
 
 </script>
 
 </body>
-
 </html>
