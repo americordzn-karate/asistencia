@@ -1,1 +1,218 @@
-aqui
+<!DOCTYPE html>
+<html lang="es">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Lector NFC Senshi-Kan</title>
+
+<style>
+
+body{
+    margin:0;
+    padding:0;
+    background:#111;
+    color:white;
+    font-family:Arial,Helvetica,sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+
+.contenedor{
+
+    width:420px;
+    text-align:center;
+
+}
+
+h1{
+
+    margin-bottom:30px;
+
+}
+
+input{
+
+    width:100%;
+    padding:15px;
+    font-size:28px;
+    text-align:center;
+    box-sizing:border-box;
+
+}
+
+#estado{
+
+    margin-top:25px;
+    font-size:22px;
+    font-weight:bold;
+
+}
+
+.ok{
+
+    color:#00d84a;
+
+}
+
+.error{
+
+    color:#ff5050;
+
+}
+
+.esperando{
+
+    color:#ffc107;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="contenedor">
+
+<h1>Lector NFC</h1>
+
+<input
+id="txtID"
+type="text"
+readonly
+placeholder="Esperando tarjeta...">
+
+<div id="estado" class="esperando">
+Inicializando lector...
+</div>
+
+</div>
+
+<script>
+
+const txt=document.getElementById("txtID");
+const estado=document.getElementById("estado");
+
+window.addEventListener("load", iniciarNFC);
+
+async function iniciarNFC(){
+
+    if(!("NDEFReader" in window)){
+
+        estado.className="error";
+        estado.innerHTML="Este dispositivo no soporta Web NFC.";
+        return;
+
+    }
+
+    try{
+
+        const ndef=new NDEFReader();
+
+        await ndef.scan();
+
+        estado.className="esperando";
+        estado.innerHTML="📡 Acerque una tarjeta NFC";
+
+        ndef.onreading=(event)=>{
+
+            leerTarjeta(event);
+
+        };
+
+        ndef.onreadingerror=()=>{
+
+            estado.className="error";
+            estado.innerHTML="Error al leer la tarjeta.";
+
+        };
+
+    }
+
+    catch(e){
+
+        estado.className="error";
+        estado.innerHTML=e.message;
+
+        console.error(e);
+
+    }
+
+}
+
+function leerTarjeta(event){
+
+    let contenido="";
+
+    const decoder=new TextDecoder();
+
+    for(const record of event.message.records){
+
+        switch(record.recordType){
+
+            case "text":
+
+                contenido=decoder.decode(record.data);
+                break;
+
+            case "url":
+
+                contenido=decoder.decode(record.data);
+                break;
+
+            default:
+
+                contenido=decoder.decode(record.data);
+
+        }
+
+    }
+
+    txt.value=contenido;
+
+    estado.className="ok";
+    estado.innerHTML="✅ RECIBIDO";
+
+    beep();
+
+    setTimeout(()=>{
+
+        estado.className="esperando";
+        estado.innerHTML="📡 Acerque una tarjeta NFC";
+
+    },2000);
+
+}
+
+function beep(){
+
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+
+    const osc=ctx.createOscillator();
+
+    const gain=ctx.createGain();
+
+    osc.type="sine";
+    osc.frequency.value=900;
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+
+    gain.gain.setValueAtTime(0.2,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.20);
+
+    osc.stop(ctx.currentTime+0.20);
+
+}
+
+</script>
+
+</body>
+
+</html>
