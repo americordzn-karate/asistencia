@@ -286,8 +286,7 @@ INICIO DEL SISTEMA
 
 document.addEventListener("DOMContentLoaded", function () {
 
-    alert("DOM listo");
-
+    
     iniciarNFC();
 
 });
@@ -303,11 +302,11 @@ LECTOR NFC
 
 async function iniciarNFC(){
 
-    alert("1");
+    
 
     if(!("NDEFReader" in window)){
 
-        alert("2");
+       
 
         estado.className="error";
 
@@ -317,28 +316,26 @@ async function iniciarNFC(){
 
     }
 
-    alert("3");
+    
 
     try{
 
-        alert("4");
+        
 
         ndef = new NDEFReader();
 
-        alert("5");
+        
 
         await ndef.scan();
 
-        alert("6");
-
+        
         estado.className="espera";
 
-        estado.innerHTML="📲 Acerque su tarjeta NFC";
+        estado.innerHTML="📲 Acerca tu tarjeta";
 
         ndef.onreading = (evento)=>{
 
-            alert("7");
-
+            
             leerTarjeta(evento);
 
         };
@@ -346,7 +343,7 @@ async function iniciarNFC(){
     }
     catch(error){
 
-        alert("ERROR: "+error);
+       
 
         console.error(error);
 
