@@ -110,7 +110,6 @@ body{
 
 }
 
-   
 
 /* ================================
    ESTADO DEL LECTOR
@@ -218,29 +217,103 @@ body{
 
 }
 
-   .btnNFC{
 
-    display:block;
+/* ================================
+   ALERTA DE PAGO PENDIENTE
+================================ */
 
-    margin:20px auto;
+#overlayPago{
 
-    padding:18px 30px;
+    display:none;
 
-    font-size:26px;
+    position:fixed;
+
+    top:0;
+
+    left:0;
+
+    width:100%;
+
+    height:100%;
+
+    background:#8b0000;
+
+    flex-direction:column;
+
+    justify-content:center;
+
+    align-items:center;
+
+    text-align:center;
+
+    z-index:999;
+
+    padding:20px;
+
+}
+
+.pagoIcono{
+
+    font-size:90px;
+
+    margin-bottom:20px;
+
+}
+
+.pagoTitulo{
+
+    font-size:55px;
 
     font-weight:bold;
 
+    letter-spacing:2px;
+
+    color:#ffffff;
+
+    margin-bottom:20px;
+
+}
+
+.pagoNombre{
+
+    font-size:38px;
+
+    font-weight:bold;
+
+    text-transform:uppercase;
+
+    color:#ffffff;
+
+    margin-bottom:50px;
+
+}
+
+#btnEnterado{
+
+    font-size:28px;
+
+    font-weight:bold;
+
+    padding:18px 60px;
+
     border:none;
 
-    border-radius:15px;
+    border-radius:10px;
 
-    background:#009933;
+    background:#ffffff;
 
-    color:white;
+    color:#8b0000;
 
     cursor:pointer;
 
 }
+
+#btnEnterado:active{
+
+    transform:scale(0.97);
+
+}
+
 
 </style>
 
@@ -260,9 +333,7 @@ body{
 <div class="titulo">
     ACADEMIA SENSHI-KAN
 </div>
-<button id="btnNFC" class="btnNFC" style="display:none;">
-    ACTIVAR LECTOR NFC
-</button>
+
 
     <div class="subtitulo">
         Control de asistencia
@@ -293,6 +364,23 @@ body{
 </div>
 
 
+<!-- ================================
+     OVERLAY: ALERTA DE PAGO PENDIENTE
+================================ -->
+
+<div id="overlayPago">
+
+    <div class="pagoIcono">⚠️</div>
+
+    <div class="pagoTitulo">PAGO PENDIENTE</div>
+
+    <div class="pagoNombre" id="nombrePagoPendiente"></div>
+
+    <button id="btnEnterado" onclick="confirmarPagoPendiente()">ENTERADO</button>
+
+</div>
+
+
 
 <script>
 
@@ -309,15 +397,18 @@ CONFIGURACIÓN DEL SISTEMA
 const URL_SCRIPT = 
 "https://script.google.com/macros/s/AKfycbwX5w8iiwkJVbGtpz-5f20U9jue2MC0vouE3blkHXo9CIMqg9bvCZrAYE8WKxH4gXGWzg/exec";
 
-const btnNFC = document.getElementById("btnNFC");
+
 
 // Control para evitar múltiples lecturas
 
 const estado = document.getElementById("estado");
 const nombreAlumno = document.getElementById("nombreAlumno");
+const overlayPago = document.getElementById("overlayPago");
+const nombrePagoPendiente = document.getElementById("nombrePagoPendiente");
 
 let bloqueado = false;
 let ndef = null;
+let ultimoIdAlumno = null;
 
 
 
@@ -391,12 +482,6 @@ async function iniciarNFC(){
 
         console.error(error);
 
-btnNFC.style.display = "block";
-
-estado.className = "espera";
-
-estado.innerHTML = "Pulse el botón para activar el lector NFC.";
-
     }
 
 }
@@ -464,7 +549,7 @@ function leerTarjeta(evento){
     if(contenido!=""){
 
 
-        procesarIDAlumno(contenido);
+        procesarIDAlumno(contenido, false);
 
 
     }
@@ -476,23 +561,12 @@ function leerTarjeta(evento){
         );
 
 
+        // Cooldown estándar antes de aceptar otra tarjeta
+
+        programarDesbloqueo(5000);
+
+
     }
-
-
-
-    // Esperar antes de aceptar otra tarjeta
-
-    setTimeout(()=>{
-
-
-        bloqueado=false;
-
-
-        volverEsperando();
-
-
-
-    },5000);
 
 
 
@@ -517,7 +591,10 @@ ENVIAR ID AL APPS SCRIPT
 */
 
 
-async function procesarIDAlumno(id){
+async function procesarIDAlumno(id, confirmado){
+
+
+    ultimoIdAlumno = id;
 
 
     estado.className="espera";
@@ -543,7 +620,9 @@ async function procesarIDAlumno(id){
 
         accion:"registrarAsistencia",
 
-        idAlumno:id
+        idAlumno:id,
+
+        confirmado:confirmado===true
 
     })
 
@@ -582,6 +661,10 @@ const datos = JSON.parse(textoRespuesta);
 
     nombreAlumno.innerHTML=error.stack || "";
 
+    // Cooldown estándar antes de aceptar otra tarjeta
+
+    programarDesbloqueo(5000);
+
 }
 
 
@@ -595,6 +678,20 @@ MOSTRAR RESULTADO DEL SERVIDOR
 
 
 function mostrarResultado(datos){
+
+
+
+    // --- CASO: PAGO PENDIENTE ---
+    // El lector permanece bloqueado y no se registra asistencia
+    // hasta que el usuario pulse el botón ENTERADO.
+
+    if(!datos.success && datos.codigo==="PAGO_PENDIENTE"){
+
+        mostrarAlertaPagoPendiente(datos.nombre);
+
+        return;
+
+    }
 
 
 
@@ -675,9 +772,59 @@ function mostrarResultado(datos){
 
 
 
+    // Cooldown estándar de 5 segundos antes de aceptar otra tarjeta
+
+    programarDesbloqueo(5000);
+
+
+
 }
 
 
+
+/*
+==================================================
+ALERTA DE PAGO PENDIENTE
+==================================================
+*/
+
+
+function mostrarAlertaPagoPendiente(nombre){
+
+
+    overlayPago.style.display="flex";
+
+
+    nombrePagoPendiente.innerHTML = nombre || "";
+
+
+    // Nota: "bloqueado" permanece en true. El lector NFC no
+    // procesará nuevas tarjetas hasta que se pulse ENTERADO.
+
+
+}
+
+
+function confirmarPagoPendiente(){
+
+
+    overlayPago.style.display="none";
+
+
+    estado.className="espera";
+
+
+    estado.innerHTML=
+    "🔎 Verificando alumno...";
+
+
+    // Se reenvía el mismo ID de alumno, ahora confirmado,
+    // para registrar la asistencia y asignar los puntos.
+
+    procesarIDAlumno(ultimoIdAlumno, true);
+
+
+}
 
 
 
@@ -692,6 +839,26 @@ function volverEsperando(){
 
     estado.innerHTML=
     "📲 Acerca tu tarjeta";
+
+
+}
+
+
+
+function programarDesbloqueo(ms){
+
+
+    setTimeout(()=>{
+
+
+        bloqueado=false;
+
+
+        volverEsperando();
+
+
+
+    }, ms);
 
 
 }
@@ -761,13 +928,6 @@ function reproducirSonidoError(){
     osc.stop(audio.currentTime + 0.40);
 
 }
-   btnNFC.addEventListener("click", async ()=>{
-
-    btnNFC.style.display="none";
-
-    await iniciarNFC();
-
-});
 </script>
 
 
