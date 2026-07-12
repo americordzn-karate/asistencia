@@ -301,86 +301,54 @@ LECTOR NFC
 
 async function iniciarNFC(){
 
-
-    // Verificar compatibilidad
+    alert("1");
 
     if(!("NDEFReader" in window)){
 
+        alert("2");
 
         estado.className="error";
 
-        estado.innerHTML=
-        "Este dispositivo no soporta NFC";
-
+        estado.innerHTML="Este dispositivo no soporta NFC";
 
         return;
 
-
     }
 
-
+    alert("3");
 
     try{
 
+        alert("4");
 
         ndef = new NDEFReader();
 
-
+        alert("5");
 
         await ndef.scan();
 
-alert("NFC ACTIVADO");
-
+        alert("6");
 
         estado.className="espera";
 
-        estado.innerHTML=
-        "📲 Acerque su tarjeta NFC";
+        estado.innerHTML="📲 Acerque su tarjeta NFC";
 
+        ndef.onreading = (evento)=>{
 
-
-        ndef.onreading = evento =>{
-
+            alert("7");
 
             leerTarjeta(evento);
 
-
         };
-
-
-
-        ndef.onreadingerror = ()=>{
-
-
-            estado.className="error";
-
-            estado.innerHTML=
-            "Error al leer tarjeta";
-
-
-        };
-
-
 
     }
-
-
     catch(error){
 
+        alert("ERROR: "+error);
 
         console.error(error);
 
-
-
-        estado.className="error";
-
-
-        estado.innerHTML=
-        "Permiso NFC requerido";
-
-
     }
-
 
 }
 
