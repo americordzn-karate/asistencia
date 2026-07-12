@@ -499,27 +499,171 @@ POR AHORA SOLO MOSTRAMOS EL ID RECIBIDO
 */
 
 
-function procesarIDAlumno(id){
+/*
+==================================================
+ENVIAR ID AL APPS SCRIPT
+==================================================
+*/
 
+
+async function procesarIDAlumno(id){
 
 
     estado.className="espera";
 
 
     estado.innerHTML=
-    "Tarjeta detectada";
+    "🔎 Verificando alumno...";
+
+
+
+    try{
+
+
+        const respuesta =
+        await fetch(
+            URL_SCRIPT,
+            {
+
+
+                method:"POST",
+
+
+                body:JSON.stringify({
+
+                    accion:"registrarAsistencia",
+
+                    idAlumno:id
+
+                })
+
+            }
+        );
+
+
+
+        const datos =
+        await respuesta.json();
+
+
+
+        console.log(datos);
+
+
+
+        mostrarResultado(datos);
+
+
+
+    }
+
+
+    catch(error){
+
+
+        console.error(error);
+
+
+
+        mostrarError(
+        "Error de conexión"
+        );
+
+
+    }
+
+
+}
+
+   /*
+==================================================
+MOSTRAR RESULTADO DEL SERVIDOR
+==================================================
+*/
+
+
+function mostrarResultado(datos){
+
 
 
     nombreAlumno.style.display="block";
 
 
-    nombreAlumno.innerHTML=
-    "ID: "+id;
+
+    if(datos.success){
+
+
+
+        estado.className="exito";
+
+
+        estado.innerHTML=
+        "✅ ASISTENCIA REGISTRADA";
+
+
+
+        nombreAlumno.innerHTML=
+        datos.nombre;
+
+
+
+        reproducirSonidoOK();
+
+
+
+    }
+
+
+
+    else if(datos.codigo==="DUPLICADO"){
+
+
+
+        estado.className="error";
+
+
+        estado.innerHTML=
+        "⚠ YA REGISTRÓ ASISTENCIA";
+
+
+
+        nombreAlumno.innerHTML=
+        datos.nombre;
+
+
+
+        reproducirSonidoError();
+
+
+
+    }
+
+
+
+    else{
+
+
+        estado.className="error";
+
+
+        estado.innerHTML=
+        "❌ ALUMNO NO ENCONTRADO";
+
+
+
+        nombreAlumno.innerHTML=
+        "";
+
+
+
+        reproducirSonidoError();
+
+
+    }
 
 
 
 }
-
 
 
 
