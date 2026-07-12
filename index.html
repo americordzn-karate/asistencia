@@ -269,18 +269,11 @@ const URL_SCRIPT =
 
 // Control para evitar múltiples lecturas
 
-let bloqueado=false;
+const estado = document.getElementById("estado");
+const nombreAlumno = document.getElementById("nombreAlumno");
 
-
-
-// Referencias a elementos HTML
-
-const estado =
-document.getElementById("estado");
-
-
-const nombreAlumno =
-document.getElementById("nombreAlumno");
+let bloqueado = false;
+let ndef = null;
 
 
 
@@ -330,7 +323,7 @@ async function iniciarNFC(){
     try{
 
 
-        const ndef = new NDEFReader();
+        ndef = new NDEFReader();
 
 
 
