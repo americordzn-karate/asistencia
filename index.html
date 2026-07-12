@@ -110,6 +110,9 @@ body{
 
 }
 
+   <button id="btnNFC" class="btnNFC" style="display:none;">
+    ACTIVAR LECTOR NFC
+</button>
 
 /* ================================
    ESTADO DEL LECTOR
@@ -217,6 +220,29 @@ body{
 
 }
 
+   .btnNFC{
+
+    display:block;
+
+    margin:20px auto;
+
+    padding:18px 30px;
+
+    font-size:26px;
+
+    font-weight:bold;
+
+    border:none;
+
+    border-radius:15px;
+
+    background:#009933;
+
+    color:white;
+
+    cursor:pointer;
+
+}
 
 </style>
 
@@ -266,7 +292,13 @@ body{
 
 </div>
 
+btnNFC.addEventListener("click", async ()=>{
 
+    btnNFC.style.display="none";
+
+    await iniciarNFC();
+
+});
 
 <script>
 
@@ -283,7 +315,7 @@ CONFIGURACIÓN DEL SISTEMA
 const URL_SCRIPT = 
 "https://script.google.com/macros/s/AKfycbwX5w8iiwkJVbGtpz-5f20U9jue2MC0vouE3blkHXo9CIMqg9bvCZrAYE8WKxH4gXGWzg/exec";
 
-
+const btnNFC = document.getElementById("btnNFC");
 
 // Control para evitar múltiples lecturas
 
@@ -364,6 +396,12 @@ async function iniciarNFC(){
        
 
         console.error(error);
+
+btnNFC.style.display = "block";
+
+estado.className = "espera";
+
+estado.innerHTML = "Pulse el botón para activar el lector NFC.";
 
     }
 
