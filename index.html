@@ -1,166 +1,564 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
+
 <meta charset="UTF-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lector NFC</title>
+
+<title>Control de Asistencia NFC - Senshi-Kan</title>
+
 
 <style>
+
+/* ================================
+   CONFIGURACIÓN GENERAL
+================================ */
+
+*{
+    box-sizing:border-box;
+}
+
+
 body{
-    font-family:Arial,sans-serif;
-    background:#202124;
-    color:#fff;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
+
     margin:0;
+
+    padding:0;
+
+    height:100vh;
+
+    background:#111;
+
+    color:white;
+
+    font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
 }
 
-.container{
-    text-align:center;
-    width:90%;
-    max-width:400px;
-}
 
-input{
+/* ================================
+   CONTENEDOR PRINCIPAL
+================================ */
+
+#app{
+
     width:100%;
-    padding:15px;
-    font-size:24px;
+
+    height:100vh;
+
+    display:flex;
+
+    flex-direction:column;
+
+    justify-content:center;
+
+    align-items:center;
+
     text-align:center;
-    margin-top:20px;
+
 }
 
-button{
-    margin-top:20px;
-    padding:15px 30px;
-    font-size:20px;
+
+/* ================================
+   ENCABEZADO
+================================ */
+
+.titulo{
+
+    font-size:45px;
+
+    font-weight:bold;
+
+    letter-spacing:3px;
+
+    margin-bottom:10px;
+
 }
+
+
+.subtitulo{
+
+    font-size:25px;
+
+    color:#cccccc;
+
+    margin-bottom:50px;
+
+}
+
+
+/* ================================
+   ESTADO DEL LECTOR
+================================ */
 
 #estado{
-    margin-top:20px;
-    font-size:22px;
+
+    font-size:32px;
+
     font-weight:bold;
+
+    margin-top:40px;
+
 }
+
+
+/* ================================
+   NOMBRE DEL ALUMNO
+================================ */
+
+#nombreAlumno{
+
+    display:none;
+
+    margin-top:40px;
+
+    font-size:65px;
+
+    font-weight:bold;
+
+    text-transform:uppercase;
+
+}
+
+
+/* ================================
+   ICONO NFC
+================================ */
+
+.nfcIcon{
+
+    font-size:100px;
+
+    animation:pulse 2s infinite;
+
+}
+
+
+/* Animación */
+
+@keyframes pulse{
+
+
+    0%{
+
+        transform:scale(1);
+
+        opacity:1;
+
+    }
+
+
+    50%{
+
+        transform:scale(1.15);
+
+        opacity:.7;
+
+    }
+
+
+    100%{
+
+        transform:scale(1);
+
+        opacity:1;
+
+    }
+
+
+}
+
+
+/* ================================
+   COLORES DE MENSAJES
+================================ */
+
+.exito{
+
+    color:#00ff66;
+
+}
+
+
+.error{
+
+    color:#ff4444;
+
+}
+
+
+.espera{
+
+    color:#ffcc00;
+
+}
+
+
 </style>
+
 
 </head>
 <body>
 
-<div class="container">
 
-<h1>Lector NFC</h1>
+<div id="app">
 
-<input id="txtID" readonly placeholder="Esperando tarjeta">
 
-<button id="btnIniciar">
-Iniciar lector NFC
-</button>
+    <div class="titulo">
+        ACADEMIA SENSHI-KAN
+    </div>
 
-<div id="estado">
-Esperando...
+
+    <div class="subtitulo">
+        Control de asistencia
+    </div>
+
+
+
+    <div class="nfcIcon">
+        📲
+    </div>
+
+
+
+    <div id="estado" class="espera">
+
+        Acerque su tarjeta NFC
+
+    </div>
+
+
+
+    <div id="nombreAlumno">
+
+    </div>
+
+
+
 </div>
 
-</div>
+
 
 <script>
 
-const txt=document.getElementById("txtID");
-const estado=document.getElementById("estado");
-const boton=document.getElementById("btnIniciar");
 
-let ndef;
+/*
+==================================================
+CONFIGURACIÓN DEL SISTEMA
+==================================================
+*/
 
-boton.addEventListener("click", iniciarNFC);
+
+// URL del Web App de Google Apps Script
+
+const URL_SCRIPT = 
+"https://script.google.com/macros/s/AKfycbwX5w8iiwkJVbGtpz-5f20U9jue2MC0vouE3blkHXo9CIMqg9bvCZrAYE8WKxH4gXGWzg/exec";
+
+
+
+// Control para evitar múltiples lecturas
+
+let bloqueado=false;
+
+
+
+// Referencias a elementos HTML
+
+const estado =
+document.getElementById("estado");
+
+
+const nombreAlumno =
+document.getElementById("nombreAlumno");
+
+
+
+/*
+==================================================
+INICIO DEL SISTEMA
+==================================================
+*/
+
+
+window.onload=function(){
+
+    iniciarNFC();
+
+};
+
+
+
+/*
+==================================================
+LECTOR NFC
+==================================================
+*/
+
 
 async function iniciarNFC(){
 
+
+    // Verificar compatibilidad
+
+    if(!("NDEFReader" in window)){
+
+
+        estado.className="error";
+
+        estado.innerHTML=
+        "Este dispositivo no soporta NFC";
+
+
+        return;
+
+
+    }
+
+
+
     try{
 
-        ndef=new NDEFReader();
+
+        const ndef = new NDEFReader();
+
+
 
         await ndef.scan();
 
-        boton.style.display="none";
 
-        estado.innerHTML="📡 Acerque una tarjeta";
 
-        ndef.onreading=leer;
+        estado.className="espera";
 
-        ndef.onreadingerror=function(){
+        estado.innerHTML=
+        "📲 Acerque su tarjeta NFC";
 
-            estado.innerHTML="Error de lectura";
+
+
+        ndef.onreading = evento =>{
+
+
+            leerTarjeta(evento);
+
 
         };
 
+
+
+        ndef.onreadingerror = ()=>{
+
+
+            estado.className="error";
+
+            estado.innerHTML=
+            "Error al leer tarjeta";
+
+
+        };
+
+
+
     }
 
-    catch(e){
 
-        estado.innerHTML=e.message;
+    catch(error){
 
-        console.error(e);
+
+        console.error(error);
+
+
+
+        estado.className="error";
+
+
+        estado.innerHTML=
+        "Permiso NFC requerido";
+
 
     }
+
 
 }
 
-function leer(event){
 
-    let texto="";
 
-    const decoder=new TextDecoder();
 
-    for(const record of event.message.records){
+
+/*
+==================================================
+PROCESAR INFORMACIÓN DE LA TARJETA
+==================================================
+*/
+
+
+function leerTarjeta(evento){
+
+
+
+    // Evitar lecturas repetidas
+
+    if(bloqueado){
+
+        return;
+
+    }
+
+
+
+    bloqueado=true;
+
+
+
+    let contenido="";
+
+
+
+    const decoder =
+    new TextDecoder();
+
+
+
+    for(const record of evento.message.records){
+
+
 
         if(record.recordType==="text"){
 
-            texto=decoder.decode(record.data);
+
+            contenido =
+            decoder.decode(record.data);
+
 
         }
 
+
     }
 
-    txt.value=texto;
 
-    estado.innerHTML="✅ RECIBIDO";
 
-    beep();
+    console.log("ID recibido:",contenido);
 
-    setTimeout(function(){
 
-        estado.innerHTML="📡 Acerque otra tarjeta";
 
-    },1500);
+    if(contenido!=""){
+
+
+        procesarIDAlumno(contenido);
+
+
+    }
+    else{
+
+
+        mostrarError(
+        "Tarjeta sin información"
+        );
+
+
+    }
+
+
+
+    // Esperar antes de aceptar otra tarjeta
+
+    setTimeout(()=>{
+
+
+        bloqueado=false;
+
+
+        volverEsperando();
+
+
+
+    },3000);
+
+
 
 }
 
-function beep(){
 
-    const ctx=new AudioContext();
 
-    const osc=ctx.createOscillator();
 
-    const gain=ctx.createGain();
 
-    osc.frequency.value=900;
 
-    osc.connect(gain);
+/*
+==================================================
+POR AHORA SOLO MOSTRAMOS EL ID RECIBIDO
+==================================================
+*/
 
-    gain.connect(ctx.destination);
 
-    osc.start();
+function procesarIDAlumno(id){
 
-    gain.gain.exponentialRampToValueAtTime(
-        0.00001,
-        ctx.currentTime+0.15
-    );
 
-    osc.stop(ctx.currentTime+0.15);
+
+    estado.className="espera";
+
+
+    estado.innerHTML=
+    "Tarjeta detectada";
+
+
+    nombreAlumno.style.display="block";
+
+
+    nombreAlumno.innerHTML=
+    "ID: "+id;
+
+
+
+}
+
+
+
+
+
+
+function volverEsperando(){
+
+
+    nombreAlumno.style.display="none";
+
+
+    estado.className="espera";
+
+
+    estado.innerHTML=
+    "📲 Acerque su tarjeta NFC";
+
+
+}
+
+
+
+
+
+function mostrarError(texto){
+
+
+    estado.className="error";
+
+
+    estado.innerHTML=
+    texto;
+
 
 }
 
 </script>
 
+
 </body>
+
 </html>
