@@ -521,24 +521,23 @@ async function procesarIDAlumno(id){
 
 
         const respuesta =
-        await fetch(
-            URL_SCRIPT,
-            {
+        const respuesta = await fetch(URL_SCRIPT,{
+    
+    method:"POST",
 
+    headers:{
+        "Content-Type":"text/plain;charset=utf-8"
+    },
 
-                method:"POST",
+    body:JSON.stringify({
 
+        accion:"registrarAsistencia",
 
-                body:JSON.stringify({
+        idAlumno:id
 
-                    accion:"registrarAsistencia",
+    })
 
-                    idAlumno:id
-
-                })
-
-            }
-        );
+});
 
 
 
@@ -563,17 +562,17 @@ const datos = JSON.parse(textoRespuesta);
 
     catch(error){
 
+    console.error(error);
 
-        console.error(error);
+    estado.className="error";
 
+    estado.innerHTML=error.message;
 
+    nombreAlumno.style.display="block";
 
-        mostrarError(
-        "Error de conexión"
-        );
+    nombreAlumno.innerHTML=error.stack || "";
 
-
-    }
+}
 
 
 }
