@@ -520,8 +520,23 @@ async function procesarIDAlumno(id){
     try{
 
 
-        const respuesta =
         const respuesta = await fetch(URL_SCRIPT,{
+
+    method:"POST",
+
+    headers:{
+        "Content-Type":"text/plain;charset=utf-8"
+    },
+
+    body:JSON.stringify({
+
+        accion:"registrarAsistencia",
+
+        idAlumno:id
+
+    })
+
+});
     
     method:"POST",
 
@@ -609,7 +624,7 @@ function mostrarResultado(datos){
 
 
 
-        reproducirSonidoOK();
+       // reproducirSonidoOK();
 
 
 
@@ -634,7 +649,7 @@ function mostrarResultado(datos){
 
 
 
-        reproducirSonidoError();
+       // reproducirSonidoError();
 
 
 
