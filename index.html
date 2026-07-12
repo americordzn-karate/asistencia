@@ -292,13 +292,7 @@ body{
 
 </div>
 
-btnNFC.addEventListener("click", async ()=>{
 
-    btnNFC.style.display="none";
-
-    await iniciarNFC();
-
-});
 
 <script>
 
@@ -767,6 +761,13 @@ function reproducirSonidoError(){
     osc.stop(audio.currentTime + 0.40);
 
 }
+   btnNFC.addEventListener("click", async ()=>{
+
+    btnNFC.style.display="none";
+
+    await iniciarNFC();
+
+});
 </script>
 
 
