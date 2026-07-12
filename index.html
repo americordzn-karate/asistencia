@@ -481,7 +481,7 @@ function leerTarjeta(evento){
 
 
 
-    },3000);
+    },5000);
 
 
 
@@ -542,8 +542,11 @@ async function procesarIDAlumno(id){
 
 
 
-        const datos =
-        await respuesta.json();
+        const textoRespuesta = await respuesta.text();
+
+console.log("Respuesta servidor:", textoRespuesta);
+
+const datos = JSON.parse(textoRespuesta);
 
 
 
