@@ -448,9 +448,24 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
     await activarWakeLock();
 
-    estado.innerHTML="Pulsa el botón para activar NFC";
+    try{
 
-    btnActivarNFC.style.display="inline-block";
+        await iniciarNFC();
+
+    }catch(error){
+
+        if(error.name==="NotAllowedError"){
+
+            estado.innerHTML="Pulsa el botón para activar NFC";
+            btnActivarNFC.style.display="inline-block";
+
+        }else{
+
+            throw error;
+
+        }
+
+    }
 
 });
 console.log("JavaScript cargado correctamente");
@@ -498,47 +513,21 @@ async function activarWakeLock(){
 async function iniciarNFC(){
 
     if(!("NDEFReader" in window)){
-
         estado.className="error";
         estado.innerHTML="Este dispositivo no soporta Web NFC";
         return;
-
     }
 
-    try{
+    ndef = new NDEFReader();
 
-        ndef = new NDEFReader();
+    await ndef.scan();   // <-- si falla, deja que lance la excepción
 
-        await ndef.scan();
+    estado.className="espera";
+    estado.innerHTML="📲 Acerca tu tarjeta";
 
-        estado.className="espera";
-        estado.innerHTML="📲 Acerca tu tarjeta";
+    btnActivarNFC.style.display="none";
 
-        btnActivarNFC.style.display="none";
-
-        ndef.onreading=(evento)=>{
-
-            leerTarjeta(evento);
-
-        };
-
-        console.log("NFC iniciado correctamente");
-
-    }
-
-    catch(error){
-
-    console.error(error);
-
-    alert(error.name + "\n\n" + error.message);
-
-    estado.className="error";
-    estado.innerHTML=error.name;
-
-    btnActivarNFC.style.display="inline-block";
-
-}
-
+    ndef.onreading = leerTarjeta;
 }
 
 /*
@@ -994,12 +983,15 @@ function reproducirSonidoError(){
 
    btnActivarNFC.addEventListener("click", async ()=>{
 
-    btnActivarNFC.style.display="none";
+    try{
 
-    estado.className="espera";
-    estado.innerHTML="Solicitando permiso...";
+        await iniciarNFC();
 
-    await iniciarNFC();
+    }catch(error){
+
+        alert(error.name + "\n" + error.message);
+
+    }
 
 });
 </script>
