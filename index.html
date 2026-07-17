@@ -444,11 +444,13 @@ INICIO DEL SISTEMA
 */
 
 
-document.addEventListener("DOMContentLoaded", async function () {
+document.addEventListener("DOMContentLoaded", async ()=>{
 
     await activarWakeLock();
 
-    iniciarNFC();
+    estado.innerHTML="Pulsa el botón para activar NFC";
+
+    btnActivarNFC.style.display="inline-block";
 
 });
 console.log("JavaScript cargado correctamente");
@@ -992,14 +994,12 @@ function reproducirSonidoError(){
 
    btnActivarNFC.addEventListener("click", async ()=>{
 
-    btnActivarNFC.disabled=true;
+    btnActivarNFC.style.display="none";
 
     estado.className="espera";
-    estado.innerHTML="Activando lector NFC...";
+    estado.innerHTML="Solicitando permiso...";
 
     await iniciarNFC();
-
-    btnActivarNFC.disabled=false;
 
 });
 </script>
