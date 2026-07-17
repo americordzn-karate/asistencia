@@ -363,7 +363,19 @@ body{
 Acerca tu tarjeta
 </div>
 
-
+<button id="btnActivarNFC"
+        style="display:none;
+               margin-top:25px;
+               padding:16px 35px;
+               font-size:24px;
+               font-weight:bold;
+               border:none;
+               border-radius:10px;
+               background:#00b140;
+               color:white;
+               cursor:pointer;">
+    ACTIVAR LECTOR NFC
+</button>
 
     <div id="nombreAlumno">
 
@@ -412,6 +424,7 @@ const URL_SCRIPT =
 // Control para evitar múltiples lecturas
 
 const estado = document.getElementById("estado");
+   const btnActivarNFC = document.getElementById("btnActivarNFC");
 const nombreAlumno = document.getElementById("nombreAlumno");
    const iconoNFC = document.getElementById("iconoNFC");
 const overlayPago = document.getElementById("overlayPago");
@@ -482,58 +495,49 @@ async function activarWakeLock(){
 
 async function iniciarNFC(){
 
-    
-
     if(!("NDEFReader" in window)){
 
-       
-
         estado.className="error";
-
-        estado.innerHTML="Este dispositivo no soporta NFC";
-
+        estado.innerHTML="Este dispositivo no soporta Web NFC";
         return;
 
     }
 
-    
-
     try{
-
-        
 
         ndef = new NDEFReader();
 
-        
-
         await ndef.scan();
 
-        
         estado.className="espera";
-
         estado.innerHTML="📲 Acerca tu tarjeta";
 
-        ndef.onreading = (evento)=>{
+        btnActivarNFC.style.display="none";
 
-            
+        ndef.onreading=(evento)=>{
+
             leerTarjeta(evento);
 
         };
 
+        console.log("NFC iniciado correctamente");
+
     }
+
     catch(error){
 
-       
+    console.error(error);
 
-        console.error(error);
+    alert(error.name + "\n\n" + error.message);
 
-    }
+    estado.className="error";
+    estado.innerHTML=error.name;
+
+    btnActivarNFC.style.display="inline-block";
 
 }
 
-
-
-
+}
 
 /*
 ==================================================
@@ -983,6 +987,19 @@ function reproducirSonidoError(){
         await activarWakeLock();
 
     }
+
+});
+
+   btnActivarNFC.addEventListener("click", async ()=>{
+
+    btnActivarNFC.disabled=true;
+
+    estado.className="espera";
+    estado.innerHTML="Activando lector NFC...";
+
+    await iniciarNFC();
+
+    btnActivarNFC.disabled=false;
 
 });
 </script>
