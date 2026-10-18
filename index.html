@@ -11,6 +11,12 @@
 <link rel="icon" type="image/x-icon"
 href="https://raw.githubusercontent.com/americordzn-karate/asistencia/main/favicon.ico">
 
+<!-- ================================
+     BIBLIOTECA PARA LEER CÓDIGOS QR
+     (jsQR: analiza imágenes de la cámara y detecta códigos QR)
+================================ -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+
 <style>
 
 /* ================================
@@ -328,6 +334,42 @@ body{
 
 }
 
+/* ================================
+   VISTA DE CÁMARA PARA QR
+   (vista pequeña, circular, discreta)
+================================ */
+
+#videoQR{
+
+    display:none; /* se muestra solo cuando la cámara se activa con éxito */
+
+    width:160px;
+
+    height:160px;
+
+    object-fit:cover;
+
+    border-radius:50%;
+
+    border:3px solid #00b140;
+
+    margin-top:25px;
+
+    transform:scaleX(-1); /* efecto espejo, como en videollamadas */
+
+}
+
+#etiquetaQR{
+
+    display:none;
+
+    margin-top:10px;
+
+    font-size:16px;
+
+    color:#aaaaaa;
+
+}
 
 </style>
 
@@ -360,7 +402,7 @@ body{
 </div>
 
 <div id="estado" class="espera">
-Acerca tu tarjeta
+Acerca tu tarjeta o muestra tu QR
 </div>
 
 <button id="btnActivarNFC"
@@ -380,6 +422,13 @@ Acerca tu tarjeta
     <div id="nombreAlumno">
 
     </div>
+
+    <!-- Vista de la cámara frontal para lectura de QR -->
+    <video id="videoQR" autoplay playsinline muted></video>
+    <div id="etiquetaQR">Coloca tu código QR frente a la cámara</div>
+
+    <!-- Lienzo oculto usado solo para procesar la imagen, nunca se muestra -->
+    <canvas id="canvasQR" style="display:none;"></canvas>
 
 
 
@@ -467,6 +516,11 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
     }
 
+    // Iniciar el lector de códigos QR (cámara frontal).
+    // Si la cámara no está disponible o el usuario la rechaza,
+    // el sistema sigue funcionando normalmente solo con NFC.
+    await iniciarQR();
+
 });
 console.log("JavaScript cargado correctamente");
 
@@ -523,7 +577,7 @@ async function iniciarNFC(){
     await ndef.scan();   // <-- si falla, deja que lance la excepción
 
     estado.className="espera";
-    estado.innerHTML="📲 Acerca tu tarjeta";
+    estado.innerHTML="📲 Acerca tu tarjeta o muestra tu QR";
 
     btnActivarNFC.style.display="none";
 
@@ -612,6 +666,111 @@ if(contenido!=""){
 
 
 
+/*
+==================================================
+LECTOR DE CÓDIGOS QR (CÁMARA FRONTAL)
+==================================================
+Este bloque activa la cámara frontal del teléfono y revisa
+la imagen varias veces por segundo buscando un código QR.
+Cuando encuentra uno, reutiliza exactamente el mismo proceso
+de registro que ya usa el NFC (procesarIDAlumno), por lo que
+toda la lógica de pagos pendientes, duplicados, sonidos y
+mensajes funciona igual para ambos métodos.
+==================================================
+*/
+
+const videoQR = document.getElementById("videoQR");
+const etiquetaQR = document.getElementById("etiquetaQR");
+const canvasQR = document.getElementById("canvasQR");
+const contextoQR = canvasQR.getContext("2d", { willReadFrequently: true });
+
+let escaneando = false;
+let ultimoQRLeido = "";
+let tiempoUltimoQR = 0;
+
+async function iniciarQR(){
+
+    // Si el navegador no soporta acceso a cámara, se omite sin romper nada
+    if(!("mediaDevices" in navigator) || !("getUserMedia" in navigator.mediaDevices)){
+
+        console.log("Este dispositivo no soporta lectura de cámara para QR");
+        return;
+
+    }
+
+    try{
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+
+            video: { facingMode: "user" }, // cámara frontal
+            audio: false
+
+        });
+
+        videoQR.srcObject = stream;
+
+        await videoQR.play();
+
+        videoQR.style.display = "block";
+        etiquetaQR.style.display = "block";
+
+        escaneando = true;
+
+        requestAnimationFrame(escanearQR);
+
+    }catch(error){
+
+        // Si el usuario no da permiso de cámara, o no hay cámara disponible,
+        // el sistema NFC sigue funcionando con total normalidad.
+        console.log("Cámara no disponible para QR:", error);
+
+    }
+
+}
+
+function escanearQR(){
+
+    if(!escaneando){
+        return;
+    }
+
+    if(videoQR.readyState === videoQR.HAVE_ENOUGH_DATA){
+
+        canvasQR.width = videoQR.videoWidth;
+        canvasQR.height = videoQR.videoHeight;
+
+        contextoQR.drawImage(videoQR, 0, 0, canvasQR.width, canvasQR.height);
+
+        const imageData = contextoQR.getImageData(0, 0, canvasQR.width, canvasQR.height);
+
+        const resultado = jsQR(imageData.data, imageData.width, imageData.height);
+
+        if(resultado && resultado.data && !bloqueado){
+
+            const ahora = Date.now();
+
+            // Evita procesar el mismo QR varias veces seguidas en menos de 4 segundos
+            if(resultado.data !== ultimoQRLeido || (ahora - tiempoUltimoQR) > 4000){
+
+                ultimoQRLeido = resultado.data;
+                tiempoUltimoQR = ahora;
+
+                bloqueado = true;
+
+                reproducirSonidoDeteccion();
+
+                procesarIDAlumno(resultado.data, false);
+
+            }
+
+        }
+
+    }
+
+    requestAnimationFrame(escanearQR);
+
+}
+
 
 
 
@@ -639,6 +798,9 @@ async function procesarIDAlumno(id, confirmado){
 
 
     iconoNFC.style.display="none";
+
+videoQR.style.display="none";
+etiquetaQR.style.display="none";
 
 nombreAlumno.style.display="none";
 
@@ -875,11 +1037,18 @@ function volverEsperando(){
 
     iconoNFC.style.display="block";
 
+    if(escaneando){
+
+        videoQR.style.display="block";
+        etiquetaQR.style.display="block";
+
+    }
+
     nombreAlumno.style.display="none";
 
     estado.className="espera";
 
-    estado.innerHTML="Acerca tu tarjeta";
+    estado.innerHTML="Acerca tu tarjeta o muestra tu QR";
 
 }
 
