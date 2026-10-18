@@ -371,6 +371,54 @@ body{
 
 }
 
+/* ================================
+   DISEÑO: ÍCONO NFC Y CÁMARA LADO A LADO
+   (estas reglas van al final para ajustar tamaños
+   sin modificar las reglas originales de arriba)
+================================ */
+
+#filaLectores{
+
+    display:flex;
+
+    flex-direction:row;
+
+    justify-content:center;
+
+    align-items:center;
+
+    gap:30px;
+
+    margin-top:10px;
+
+}
+
+#filaLectores .nfcIcon{
+
+    font-size:70px;
+
+    margin:0;
+
+}
+
+#filaLectores #videoQR{
+
+    width:130px;
+
+    height:130px;
+
+    margin:0;
+
+}
+
+#etiquetaQR{
+
+    margin-top:8px;
+
+    font-size:14px;
+
+}
+
 </style>
 
 
@@ -397,9 +445,19 @@ body{
 
 
 
-    <div id="iconoNFC" class="nfcIcon">
+    <!-- Fila que coloca el ícono NFC y la cámara uno al lado del otro -->
+    <div id="filaLectores">
+
+        <div id="iconoNFC" class="nfcIcon">
 🛜
 </div>
+
+        <!-- Vista de la cámara frontal para lectura de QR -->
+        <video id="videoQR" autoplay playsinline muted></video>
+
+    </div>
+
+    <div id="etiquetaQR">Coloca tu código QR frente a la cámara</div>
 
 <div id="estado" class="espera">
 Acerca tu tarjeta o muestra tu QR
@@ -422,10 +480,6 @@ Acerca tu tarjeta o muestra tu QR
     <div id="nombreAlumno">
 
     </div>
-
-    <!-- Vista de la cámara frontal para lectura de QR -->
-    <video id="videoQR" autoplay playsinline muted></video>
-    <div id="etiquetaQR">Coloca tu código QR frente a la cámara</div>
 
     <!-- Lienzo oculto usado solo para procesar la imagen, nunca se muestra -->
     <canvas id="canvasQR" style="display:none;"></canvas>
