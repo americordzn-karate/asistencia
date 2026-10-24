@@ -1238,6 +1238,20 @@ function reproducirSonidoError(){
     }
 
 });
+
+/*
+==================================================
+MANTENER EL SERVIDOR DESPIERTO
+==================================================
+Envía una petición ligera al abrir la página y cada 4 minutos
+para evitar que Google "duerma" el script entre alumnos.
+No afecta ninguna otra función.
+*/
+function calentarServidor(){
+    fetch(URL_SCRIPT + "?accion=ping").catch(()=>{});
+}
+calentarServidor();
+setInterval(calentarServidor, 4 * 60 * 1000);
 </script>
 
 
