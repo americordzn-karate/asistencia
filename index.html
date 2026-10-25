@@ -419,6 +419,24 @@ body{
 
 }
 
+/* Foto del alumno en la pantalla de asistencia exitosa */
+
+#fotoAlumno{
+
+    display:none;
+
+    width:150px;
+
+    height:150px;
+
+    object-fit:cover;
+
+    border-radius:50%;
+
+    border:4px solid #00ff66;
+
+}
+
 </style>
 
 
@@ -454,6 +472,9 @@ body{
 
         <!-- Vista de la cámara frontal para lectura de QR -->
         <video id="videoQR" autoplay playsinline muted></video>
+
+        <!-- Foto del alumno (solo visible cuando la asistencia se registra con éxito) -->
+        <img id="fotoAlumno" alt="Foto del alumno">
 
     </div>
 
@@ -847,6 +868,9 @@ async function procesarIDAlumno(id, confirmado){
 
     ultimoIdAlumno = id;
 
+    // Pide la foto en paralelo, sin retrasar el registro de asistencia
+    if(id !== idPromesaFoto){ solicitarFoto(id); }
+
 
     estado.className="espera";
 
@@ -977,6 +1001,8 @@ function mostrarResultado(datos){
 
        reproducirSonidoOK();
 
+       mostrarFotoAlumno();
+
 
 
     }
@@ -1090,6 +1116,11 @@ function confirmarPagoPendiente(){
 function volverEsperando(){
 
     iconoNFC.style.display="block";
+
+    marcaFoto++;
+    idPromesaFoto = null;
+    fotoAlumno.style.display="none";
+    fotoAlumno.removeAttribute("src");
 
     if(escaneando){
 
@@ -1252,6 +1283,59 @@ function calentarServidor(){
 }
 calentarServidor();
 setInterval(calentarServidor, 4 * 60 * 1000);
+
+/*
+==================================================
+FOTO DEL ALUMNO
+==================================================
+Al leer una tarjeta o QR, se pide la foto al servidor en paralelo
+con el registro de asistencia. Solo se muestra cuando la asistencia
+se registra con éxito, y se oculta al terminar el cooldown.
+Si el alumno no tiene foto o no carga, todo sigue igual que antes.
+*/
+
+const fotoAlumno = document.getElementById("fotoAlumno");
+
+let promesaFoto = null;
+let idPromesaFoto = null;
+let marcaFoto = 0;
+
+function solicitarFoto(id){
+
+    idPromesaFoto = id;
+
+    promesaFoto = fetch(URL_SCRIPT,{
+
+        method:"POST",
+
+        headers:{ "Content-Type":"text/plain;charset=utf-8" },
+
+        body:JSON.stringify({ accion:"fotoAlumno", idAlumno:id })
+
+    })
+    .then(r => r.json())
+    .then(d => (d && d.success && d.foto) ? d.foto : null)
+    .catch(() => null);
+
+}
+
+async function mostrarFotoAlumno(){
+
+    const marca = ++marcaFoto;
+
+    if(!promesaFoto) return;
+
+    const fuente = await promesaFoto;
+
+    // Solo se muestra si sigue vigente la misma pantalla de resultado
+    if(fuente && marca === marcaFoto){
+
+        fotoAlumno.src = fuente;
+        fotoAlumno.style.display = "block";
+
+    }
+
+}
 </script>
 
 
