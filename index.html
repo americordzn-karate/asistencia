@@ -770,6 +770,7 @@ const contextoQR = canvasQR.getContext("2d", { willReadFrequently: true });
 let escaneando = false;
 let ultimoQRLeido = "";
 let tiempoUltimoQR = 0;
+let ultimoEscaneo = 0;
 
 async function iniciarQR(){
 
@@ -791,7 +792,12 @@ async function iniciarQR(){
 
         const stream = await navigator.mediaDevices.getUserMedia({
 
-            video: { facingMode: "user" }, // cámara frontal
+            video: {
+                facingMode: "user",                 // cámara frontal
+                width:  { ideal: 320 },             // resolución baja (menos carga)
+                height: { ideal: 240 },
+                frameRate: { ideal: 10, max: 15 }   // pocos cuadros por segundo
+            },
             audio: false
 
         });
@@ -823,7 +829,12 @@ function escanearQR(){
         return;
     }
 
-    if(videoQR.readyState === videoQR.HAVE_ENOUGH_DATA){
+    const ahoraFrame = Date.now();
+
+    // Se analiza la imagen como máximo ~8 veces por segundo (menos carga al teléfono)
+    if(videoQR.readyState === videoQR.HAVE_ENOUGH_DATA && (ahoraFrame - ultimoEscaneo) >= 120){
+
+        ultimoEscaneo = ahoraFrame;
 
         canvasQR.width = videoQR.videoWidth;
         canvasQR.height = videoQR.videoHeight;
