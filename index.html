@@ -573,12 +573,9 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
     await activarWakeLock();
 
-    // La cámara se inicia primero y el NFC después, para evitar que la
-    // cámara interrumpa la lectura NFC en algunos teléfonos (ej. Samsung A53).
-    await iniciarQR();
-
     try{
 
+        // 1) Primero se activa el lector NFC para que Chrome tome el control
         await iniciarNFC();
 
     }catch(error){
@@ -590,15 +587,19 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
         }else{
 
-            throw error;
+            console.error(error);
 
         }
 
+    }finally{
+
+        // 2) La cámara se enciende 3 segundos después, cuando Chrome ya
+        //    tiene el control del NFC (evita conflictos en el Samsung A53).
+        //    Si la cámara no está disponible, el sistema sigue solo con NFC.
+        setTimeout(iniciarQR, 3000);
+
     }
 
-    // Iniciar el lector de códigos QR (cámara frontal).
-    // Si la cámara no está disponible o el usuario la rechaza,
-    // el sistema sigue funcionando normalmente solo con NFC.
 });
 console.log("JavaScript cargado correctamente");
 
@@ -784,7 +785,7 @@ async function iniciarQR(){
     }
 
     // Ya está encendida o en proceso de encenderse
-    if(escaneando || iniciandoCamara){
+    if(escaneando || iniciandoCamara || camaraSuspendida){
         return;
     }
 
@@ -1398,18 +1399,14 @@ async function mostrarFotoAlumno(){
 
 /*
 ==================================================
-MODO NFC: TOCAR EL ÍCONO RECARGA LA PÁGINA SIN CÁMARA
+MODO NFC: TOCAR EL ÍCONO APAGA LA CÁMARA TEMPORALMENTE
 ==================================================
-En algunos teléfonos (ej. Samsung A53) la cámara deja sin efecto al
-lector NFC y no se puede reactivar sin recargar la página. Por eso,
-al tocar el ícono NFC la página se recarga con "?modo=nfc": la cámara
-NO se enciende y el lector NFC arranca limpio. Cuando termina la
-lectura (o a los 20 segundos sin tarjeta), la página vuelve sola a su
-modo normal con la cámara encendida. Tocar el ícono de nuevo cancela.
+El lector NFC se activa al cargar la página (antes que la cámara), por
+lo que Chrome ya tiene el control. Al tocar el ícono NFC solo se apaga
+la cámara, SIN reiniciar el lector NFC. La cámara se vuelve a encender
+sola al terminar la lectura, o a los 20 segundos si nadie acerca una
+tarjeta. Tocar el ícono otra vez cancela el modo NFC.
 */
-
-const MODO_NFC_TEMPORAL =
-    new URLSearchParams(window.location.search).get("modo") === "nfc";
 
 iconoNFC.style.cursor = "pointer";
 
@@ -1417,36 +1414,40 @@ iconoNFC.addEventListener("click", ()=>{
 
     if(bloqueado) return;
 
-    if(MODO_NFC_TEMPORAL){
+    // Segundo toque: cancelar y volver a la cámara
+    if(camaraSuspendida){
         salirModoNFC();
         return;
     }
 
-    const parametros = new URLSearchParams(window.location.search);
-    parametros.set("modo", "nfc");
+    camaraSuspendida = true;
 
-    window.location.href = window.location.pathname + "?" + parametros.toString();
+    detenerCamara();
+
+    estado.className = "espera";
+    estado.innerHTML = "📲 Acerca tu tarjeta ahora";
+
+    clearTimeout(temporizadorNFC);
+    temporizadorNFC = setTimeout(salirModoNFC, 20000);
 
 });
 
-function salirModoNFC(){
+async function salirModoNFC(){
 
-    if(!MODO_NFC_TEMPORAL) return;
+    clearTimeout(temporizadorNFC);
 
-    // Si hay una lectura en curso, se espera a que termine
+    if(!camaraSuspendida) return;
+
+    // Si hay una lectura en curso, la cámara se reactiva al terminar el cooldown
     if(bloqueado) return;
 
-    const parametros = new URLSearchParams(window.location.search);
-    parametros.delete("modo");
+    camaraSuspendida = false;
 
-    const resto = parametros.toString();
+    await iniciarQR();
 
-    window.location.replace(window.location.pathname + (resto ? "?" + resto : ""));
+    estado.className = "espera";
+    estado.innerHTML = "Acerca tu tarjeta o muestra tu QR";
 
-}
-
-if(MODO_NFC_TEMPORAL){
-    setTimeout(salirModoNFC, 20000);
 }
 </script>
 
