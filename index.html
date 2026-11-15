@@ -593,10 +593,9 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
     }finally{
 
-        // 2) La cámara se enciende 3 segundos después, cuando Chrome ya
-        //    tiene el control del NFC (evita conflictos en el Samsung A53).
+        // 2) La cámara se enciende justo después de activar el NFC.
         //    Si la cámara no está disponible, el sistema sigue solo con NFC.
-        setTimeout(iniciarQR, 3000);
+        iniciarQR();
 
     }
 
