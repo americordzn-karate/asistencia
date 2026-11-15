@@ -599,10 +599,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
     // Iniciar el lector de códigos QR (cámara frontal).
     // Si la cámara no está disponible o el usuario la rechaza,
     // el sistema sigue funcionando normalmente solo con NFC.
-    // Re-arma el lector NFC unos segundos después de que la cámara ya está
-    // encendida, por si esta lo interrumpió.
-    setTimeout(reiniciarNFCSilencioso, 3000);
-
 });
 console.log("JavaScript cargado correctamente");
 
@@ -1177,7 +1173,6 @@ function volverEsperando(){
     iconoNFC.style.display="block";
 
     marcaFoto++;
-    reiniciarNFCSilencioso();
     salirModoNFC();
     idPromesaFoto = null;
     fotoAlumno.style.display="none";
@@ -1404,16 +1399,28 @@ REINICIO SILENCIOSO DEL LECTOR NFC
 ==================================================
 Algunos teléfonos (ej. Samsung A53) dejan de leer NFC mientras la
 cámara está encendida. Esta función vuelve a activar la escucha NFC
-sin cambiar nada en pantalla. Se ejecuta al iniciar, después de cada
-lectura, al volver a mostrar la página y cada 5 minutos.
+sin cambiar nada en pantalla. Solo se ejecuta cuando el alumno toca el
+ícono NFC.
 */
 async function reiniciarNFCSilencioso(){
 
-    if(!("NDEFReader" in window) || !ndef) return;
+    // Devuelve null si todo salió bien, o el error si falló
+
+    if(!("NDEFReader" in window)) return { name:"SinWebNFC" };
 
     try{
 
-        const anterior = controladorNFC;
+        // 1) Se cierra por completo la escucha anterior. Si se dejara abierta,
+        //    Chrome la reutilizaría sin volver a registrarla en el sistema.
+        if(controladorNFC){
+            try{ controladorNFC.abort(); }catch(e){}
+            controladorNFC = null;
+        }
+
+        // 2) Breve pausa para que el sistema libere el lector
+        await new Promise(r => setTimeout(r, 250));
+
+        // 3) Se abre una escucha nueva
         const nuevo = new AbortController();
         const lector = new NDEFReader();
 
@@ -1423,21 +1430,16 @@ async function reiniciarNFCSilencioso(){
         ndef = lector;
         controladorNFC = nuevo;
 
-        if(anterior){ try{ anterior.abort(); }catch(e){} }
+        return null;
 
     }catch(error){
 
         console.log("Reinicio NFC no realizado:", error);
+        return error;
 
     }
 
 }
-
-document.addEventListener("visibilitychange", ()=>{
-    if(document.visibilityState==="visible"){ reiniciarNFCSilencioso(); }
-});
-
-setInterval(()=>{ if(!bloqueado){ reiniciarNFCSilencioso(); } }, 5 * 60 * 1000);
 
 /*
 ==================================================
@@ -1470,7 +1472,14 @@ async function activarModoNFC(){
     estado.className = "espera";
     estado.innerHTML = "📲 Acerca tu tarjeta ahora";
 
-    await reiniciarNFCSilencioso();
+    const fallo = await reiniciarNFCSilencioso();
+
+    if(fallo){
+        estado.className = "error";
+        estado.innerHTML = "⚠ No se pudo activar NFC (" + (fallo.name || "error") + ")";
+        setTimeout(salirModoNFC, 3000);
+        return;
+    }
 
     clearTimeout(temporizadorNFC);
     temporizadorNFC = setTimeout(salirModoNFC, 20000);
