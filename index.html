@@ -1118,7 +1118,7 @@ function mostrarResultado(datos){
 
     // Cooldown estándar de 5 segundos antes de aceptar otra tarjeta
 
-    programarDesbloqueo(3000);
+    programarDesbloqueo(5000);
 
 
 
@@ -1408,6 +1408,40 @@ sola al terminar la lectura, o a los 20 segundos si nadie acerca una
 tarjeta. Tocar el ícono otra vez cancela el modo NFC.
 */
 
+// Abre y cierra enseguida una ventana en blanco. Esto hace que Chrome salga
+// y vuelva al primer plano, lo que (en el Samsung A53) parece devolverle el
+// control del NFC después de haber usado la cámara. Experimental.
+function despertarChrome(){
+
+    return new Promise(resolver => {
+
+        try{
+
+            const ventana = window.open("about:blank", "_blank");
+
+            if(!ventana){
+                resolver();
+                return;
+            }
+
+            setTimeout(()=>{
+
+                try{ ventana.close(); }catch(e){}
+
+                setTimeout(resolver, 500);
+
+            }, 700);
+
+        }catch(e){
+
+            resolver();
+
+        }
+
+    });
+
+}
+
 iconoNFC.style.cursor = "pointer";
 
 iconoNFC.addEventListener("click", ()=>{
@@ -1425,7 +1459,16 @@ iconoNFC.addEventListener("click", ()=>{
     detenerCamara();
 
     estado.className = "espera";
-    estado.innerHTML = "📲 Acerca tu tarjeta ahora";
+    estado.innerHTML = "⏳ Preparando lector NFC...";
+
+    despertarChrome().then(()=>{
+
+        if(camaraSuspendida && !bloqueado){
+            estado.className = "espera";
+            estado.innerHTML = "📲 Acerca tu tarjeta ahora";
+        }
+
+    });
 
     clearTimeout(temporizadorNFC);
     temporizadorNFC = setTimeout(salirModoNFC, 20000);
