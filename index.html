@@ -656,7 +656,9 @@ async function iniciarNFC(){
     await ndef.scan({ signal: controladorNFC.signal });   // <-- si falla, deja que lance la excepción
 
     estado.className="espera";
-    estado.innerHTML="📲 Acerca tu tarjeta o muestra tu QR";
+    estado.innerHTML = (new URLSearchParams(window.location.search).get("modo")==="nfc")
+        ? "📲 Acerca tu tarjeta ahora"
+        : "📲 Acerca tu tarjeta o muestra tu QR";
 
     btnActivarNFC.style.display="none";
 
@@ -776,7 +778,8 @@ let temporizadorNFC = null;
 async function iniciarQR(){
 
     // Si la dirección incluye ?camara=no, no se enciende la cámara (modo solo NFC)
-    if(new URLSearchParams(window.location.search).get("camara")==="no"){
+    if(new URLSearchParams(window.location.search).get("camara")==="no" ||
+       new URLSearchParams(window.location.search).get("modo")==="nfc"){
         return;
     }
 
@@ -1395,113 +1398,55 @@ async function mostrarFotoAlumno(){
 
 /*
 ==================================================
-REINICIO SILENCIOSO DEL LECTOR NFC
+MODO NFC: TOCAR EL ÍCONO RECARGA LA PÁGINA SIN CÁMARA
 ==================================================
-Algunos teléfonos (ej. Samsung A53) dejan de leer NFC mientras la
-cámara está encendida. Esta función vuelve a activar la escucha NFC
-sin cambiar nada en pantalla. Solo se ejecuta cuando el alumno toca el
-ícono NFC.
+En algunos teléfonos (ej. Samsung A53) la cámara deja sin efecto al
+lector NFC y no se puede reactivar sin recargar la página. Por eso,
+al tocar el ícono NFC la página se recarga con "?modo=nfc": la cámara
+NO se enciende y el lector NFC arranca limpio. Cuando termina la
+lectura (o a los 20 segundos sin tarjeta), la página vuelve sola a su
+modo normal con la cámara encendida. Tocar el ícono de nuevo cancela.
 */
-async function reiniciarNFCSilencioso(){
 
-    // Devuelve null si todo salió bien, o el error si falló
-
-    if(!("NDEFReader" in window)) return { name:"SinWebNFC" };
-
-    try{
-
-        // 1) Se cierra por completo la escucha anterior. Si se dejara abierta,
-        //    Chrome la reutilizaría sin volver a registrarla en el sistema.
-        if(controladorNFC){
-            try{ controladorNFC.abort(); }catch(e){}
-            controladorNFC = null;
-        }
-
-        // 2) Breve pausa para que el sistema libere el lector
-        await new Promise(r => setTimeout(r, 250));
-
-        // 3) Se abre una escucha nueva
-        const nuevo = new AbortController();
-        const lector = new NDEFReader();
-
-        await lector.scan({ signal: nuevo.signal });
-
-        lector.onreading = leerTarjeta;
-        ndef = lector;
-        controladorNFC = nuevo;
-
-        return null;
-
-    }catch(error){
-
-        console.log("Reinicio NFC no realizado:", error);
-        return error;
-
-    }
-
-}
-
-/*
-==================================================
-MODO NFC: TOCAR EL ÍCONO APAGA LA CÁMARA TEMPORALMENTE
-==================================================
-Al tocar el ícono naranja de NFC, la cámara se apaga para que el
-lector NFC funcione sin interferencias. La cámara se vuelve a
-encender sola al terminar de leer la tarjeta, o a los 20 segundos
-si nadie acerca ninguna. Tocar el ícono otra vez cancela el modo NFC.
-*/
+const MODO_NFC_TEMPORAL =
+    new URLSearchParams(window.location.search).get("modo") === "nfc";
 
 iconoNFC.style.cursor = "pointer";
 
-iconoNFC.addEventListener("click", activarModoNFC);
-
-async function activarModoNFC(){
+iconoNFC.addEventListener("click", ()=>{
 
     if(bloqueado) return;
 
-    // Segundo toque: cancelar y volver a la cámara
-    if(camaraSuspendida){
+    if(MODO_NFC_TEMPORAL){
         salirModoNFC();
         return;
     }
 
-    camaraSuspendida = true;
+    const parametros = new URLSearchParams(window.location.search);
+    parametros.set("modo", "nfc");
 
-    detenerCamara();
+    window.location.href = window.location.pathname + "?" + parametros.toString();
 
-    estado.className = "espera";
-    estado.innerHTML = "📲 Acerca tu tarjeta ahora";
+});
 
-    const fallo = await reiniciarNFCSilencioso();
+function salirModoNFC(){
 
-    if(fallo){
-        estado.className = "error";
-        estado.innerHTML = "⚠ No se pudo activar NFC (" + (fallo.name || "error") + ")";
-        setTimeout(salirModoNFC, 3000);
-        return;
-    }
+    if(!MODO_NFC_TEMPORAL) return;
 
-    clearTimeout(temporizadorNFC);
-    temporizadorNFC = setTimeout(salirModoNFC, 20000);
+    // Si hay una lectura en curso, se espera a que termine
+    if(bloqueado) return;
+
+    const parametros = new URLSearchParams(window.location.search);
+    parametros.delete("modo");
+
+    const resto = parametros.toString();
+
+    window.location.replace(window.location.pathname + (resto ? "?" + resto : ""));
 
 }
 
-async function salirModoNFC(){
-
-    clearTimeout(temporizadorNFC);
-
-    if(!camaraSuspendida) return;
-
-    // Si hay una lectura en curso, la cámara se reactiva al terminar el cooldown
-    if(bloqueado) return;
-
-    camaraSuspendida = false;
-
-    await iniciarQR();
-
-    estado.className = "espera";
-    estado.innerHTML = "Acerca tu tarjeta o muestra tu QR";
-
+if(MODO_NFC_TEMPORAL){
+    setTimeout(salirModoNFC, 20000);
 }
 </script>
 
