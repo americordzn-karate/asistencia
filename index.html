@@ -736,7 +736,7 @@ if(contenido!=""){
 
         // Cooldown estándar antes de aceptar otra tarjeta
 
-        programarDesbloqueo(5000);
+        programarDesbloqueo(3000);
 
 
     }
@@ -1004,7 +1004,7 @@ const datos = JSON.parse(textoRespuesta);
 
     // Cooldown estándar antes de aceptar otra tarjeta
 
-    programarDesbloqueo(5000);
+    programarDesbloqueo(3000);
 
 }
 
@@ -1117,7 +1117,7 @@ function mostrarResultado(datos){
 
     // Cooldown estándar de 5 segundos antes de aceptar otra tarjeta
 
-    programarDesbloqueo(5000);
+    programarDesbloqueo(3000);
 
 
 
@@ -1470,7 +1470,7 @@ iconoNFC.addEventListener("click", ()=>{
     });
 
     clearTimeout(temporizadorNFC);
-    temporizadorNFC = setTimeout(salirModoNFC, 20000);
+    temporizadorNFC = setTimeout(salirModoNFC, 8000);
 
 });
 
