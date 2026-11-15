@@ -478,7 +478,7 @@ body{
 
     </div>
 
-    <div id="etiquetaQR">Coloca tu código QR frente a la cámara</div>
+    <div id="etiquetaQR">Coloca tu código QR frente a la cámara · Para tarjeta NFC, toca el ícono 🛜</div>
 
 <div id="estado" class="espera">
 Acerca tu tarjeta o muestra tu QR
@@ -772,6 +772,11 @@ let ultimoQRLeido = "";
 let tiempoUltimoQR = 0;
 let ultimoEscaneo = 0;
 
+let bucleQRActivo = false;
+let iniciandoCamara = false;
+let camaraSuspendida = false;   // true mientras se espera una tarjeta NFC
+let temporizadorNFC = null;
+
 async function iniciarQR(){
 
     // Si la dirección incluye ?camara=no, no se enciende la cámara (modo solo NFC)
@@ -779,6 +784,10 @@ async function iniciarQR(){
         return;
     }
 
+    // Ya está encendida o en proceso de encenderse
+    if(escaneando || iniciandoCamara){
+        return;
+    }
 
     // Si el navegador no soporta acceso a cámara, se omite sin romper nada
     if(!("mediaDevices" in navigator) || !("getUserMedia" in navigator.mediaDevices)){
@@ -788,15 +797,17 @@ async function iniciarQR(){
 
     }
 
+    iniciandoCamara = true;
+
     try{
 
         const stream = await navigator.mediaDevices.getUserMedia({
 
             video: {
                 facingMode: "user",                 // cámara frontal
-                width:  { ideal: 320 },             // resolución baja (menos carga)
-                height: { ideal: 240 },
-                frameRate: { ideal: 10, max: 15 }   // pocos cuadros por segundo
+                width:  { ideal: 640 },
+                height: { ideal: 480 },
+                frameRate: { ideal: 15, max: 20 }
             },
             audio: false
 
@@ -811,7 +822,10 @@ async function iniciarQR(){
 
         escaneando = true;
 
-        requestAnimationFrame(escanearQR);
+        if(!bucleQRActivo){
+            bucleQRActivo = true;
+            requestAnimationFrame(escanearQR);
+        }
 
     }catch(error){
 
@@ -821,11 +835,31 @@ async function iniciarQR(){
 
     }
 
+    iniciandoCamara = false;
+
+}
+
+// Apaga por completo la cámara (libera el hardware)
+function detenerCamara(){
+
+    escaneando = false;
+
+    const flujo = videoQR.srcObject;
+
+    if(flujo){
+        flujo.getTracks().forEach(pista => pista.stop());
+    }
+
+    videoQR.srcObject = null;
+    videoQR.style.display = "none";
+    etiquetaQR.style.display = "none";
+
 }
 
 function escanearQR(){
 
     if(!escaneando){
+        bucleQRActivo = false;
         return;
     }
 
@@ -1144,6 +1178,7 @@ function volverEsperando(){
 
     marcaFoto++;
     reiniciarNFCSilencioso();
+    salirModoNFC();
     idPromesaFoto = null;
     fotoAlumno.style.display="none";
     fotoAlumno.removeAttribute("src");
@@ -1403,6 +1438,62 @@ document.addEventListener("visibilitychange", ()=>{
 });
 
 setInterval(()=>{ if(!bloqueado){ reiniciarNFCSilencioso(); } }, 5 * 60 * 1000);
+
+/*
+==================================================
+MODO NFC: TOCAR EL ÍCONO APAGA LA CÁMARA TEMPORALMENTE
+==================================================
+Al tocar el ícono naranja de NFC, la cámara se apaga para que el
+lector NFC funcione sin interferencias. La cámara se vuelve a
+encender sola al terminar de leer la tarjeta, o a los 20 segundos
+si nadie acerca ninguna. Tocar el ícono otra vez cancela el modo NFC.
+*/
+
+iconoNFC.style.cursor = "pointer";
+
+iconoNFC.addEventListener("click", activarModoNFC);
+
+async function activarModoNFC(){
+
+    if(bloqueado) return;
+
+    // Segundo toque: cancelar y volver a la cámara
+    if(camaraSuspendida){
+        salirModoNFC();
+        return;
+    }
+
+    camaraSuspendida = true;
+
+    detenerCamara();
+
+    estado.className = "espera";
+    estado.innerHTML = "📲 Acerca tu tarjeta ahora";
+
+    await reiniciarNFCSilencioso();
+
+    clearTimeout(temporizadorNFC);
+    temporizadorNFC = setTimeout(salirModoNFC, 20000);
+
+}
+
+async function salirModoNFC(){
+
+    clearTimeout(temporizadorNFC);
+
+    if(!camaraSuspendida) return;
+
+    // Si hay una lectura en curso, la cámara se reactiva al terminar el cooldown
+    if(bloqueado) return;
+
+    camaraSuspendida = false;
+
+    await iniciarQR();
+
+    estado.className = "espera";
+    estado.innerHTML = "Acerca tu tarjeta o muestra tu QR";
+
+}
 </script>
 
 
