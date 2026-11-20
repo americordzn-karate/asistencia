@@ -498,6 +498,104 @@ body.conFoto #nombreAlumno{
     margin-top:12px;
 
 }
+/* ================================
+   MENSAJE DE CUMPLEAÑOS (pantalla completa)
+================================ */
+
+#overlayCumple{
+
+    display:none;
+
+    position:fixed;
+
+    top:0;
+
+    left:0;
+
+    width:100%;
+
+    height:100%;
+
+    background:#111111;
+
+    flex-direction:column;
+
+    justify-content:center;
+
+    align-items:center;
+
+    text-align:center;
+
+    z-index:1000;
+
+    padding:20px;
+
+}
+
+.cumpleEmoji{
+
+    font-size:130px;
+
+    line-height:1;
+
+    margin-bottom:25px;
+
+    animation:latido 0.9s infinite ease-in-out;
+
+}
+
+@keyframes latido{
+
+    0%,100%{ transform:scale(1); }
+
+    50%{ transform:scale(1.18); }
+
+}
+
+.cumpleTexto{
+
+    font-size:46px;
+
+    font-weight:bold;
+
+    letter-spacing:2px;
+
+    color:#ffe600;
+
+    text-shadow:0 0 18px rgba(255,230,0,0.55);
+
+    margin-bottom:45px;
+
+    max-width:95%;
+
+}
+
+#btnCumple{
+
+    font-size:26px;
+
+    font-weight:bold;
+
+    padding:16px 50px;
+
+    border:none;
+
+    border-radius:10px;
+
+    background:#ffe600;
+
+    color:#111111;
+
+    cursor:pointer;
+
+}
+
+#btnCumple:active{
+
+    transform:scale(0.97);
+
+}
+
 </style>
 
 
@@ -1079,7 +1177,20 @@ MOSTRAR RESULTADO DEL SERVIDOR
 */
 
 
-function mostrarResultado(datos){
+function mostrarResultado(datos, omitirCumple){
+
+    // --- CASO: CUMPLEAÑOS ---
+    // La asistencia ya quedó registrada en el servidor. Se muestra primero el
+    // mensaje y, al cerrarse, la pantalla normal de asistencia registrada.
+
+    if(datos.success && datos.cumple && !omitirCumple){
+
+        mostrarCumple(datos);
+
+        return;
+
+    }
+
 
 
 
@@ -1554,8 +1665,133 @@ async function salirModoNFC(){
     estado.innerHTML = "Acerca tu tarjeta o muestra tu QR";
 
 }
+
+/*
+==================================================
+MENSAJE DE CUMPLEAÑOS
+==================================================
+Cuando el servidor indica que el alumno cumple años hoy, mañana o
+cumplió ayer, se muestra un mensaje a pantalla completa durante
+8 segundos (o hasta pulsar CONTINUAR) con una melodía festiva.
+Después aparece la pantalla normal de asistencia registrada.
+*/
+
+const TEXTOS_CUMPLE = {
+    HOY:    "FELICIDADES POR TU CUMPLEAÑOS",
+    MANANA: "FELICIDADES POR TU CUMPLE DE MAÑANA",
+    AYER:   "FELICIDADES POR TU CUMPLE DE AYER!"
+};
+
+let datosCumple = null;
+let temporizadorCumple = null;
+let audioCumple = null;
+
+function mostrarCumple(datos){
+
+    datosCumple = datos;
+
+    document.getElementById("textoCumple").textContent =
+        TEXTOS_CUMPLE[datos.cumple] || TEXTOS_CUMPLE.HOY;
+
+    document.getElementById("overlayCumple").style.display = "flex";
+
+    reproducirSonidoCumple();
+
+    clearTimeout(temporizadorCumple);
+    temporizadorCumple = setTimeout(cerrarCumple, 8000);
+
+}
+
+function cerrarCumple(){
+
+    if(!datosCumple) return;
+
+    clearTimeout(temporizadorCumple);
+
+    document.getElementById("overlayCumple").style.display = "none";
+
+    if(audioCumple){
+        try{ audioCumple.close(); }catch(e){}
+        audioCumple = null;
+    }
+
+    const datos = datosCumple;
+    datosCumple = null;
+
+    mostrarResultado(datos, true);
+
+}
+
+function reproducirSonidoCumple(){
+
+    try{
+
+        const audio = new (window.AudioContext || window.webkitAudioContext)();
+
+        audioCumple = audio;
+
+        if(audio.state === "suspended"){ audio.resume(); }
+
+        // Fanfarria festiva: do-mi-sol-do agudo, repetida dos veces
+        const frase = [
+            [523.25, 0.14], [659.25, 0.14], [783.99, 0.14], [1046.50, 0.30],
+            [783.99, 0.14], [1046.50, 0.14], [1318.51, 0.40]
+        ];
+
+        let t = audio.currentTime + 0.05;
+
+        for(let repeticion = 0; repeticion < 2; repeticion++){
+
+            for(const [frecuencia, duracion] of frase){
+
+                const osc  = audio.createOscillator();
+                const gain = audio.createGain();
+
+                osc.type = "square";
+                osc.frequency.setValueAtTime(frecuencia, t);
+
+                gain.gain.setValueAtTime(0.0001, t);
+                gain.gain.exponentialRampToValueAtTime(0.30, t + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t + duracion);
+
+                osc.connect(gain);
+                gain.connect(audio.destination);
+
+                osc.start(t);
+                osc.stop(t + duracion + 0.02);
+
+                t += duracion + 0.03;
+
+            }
+
+            t += 0.25;
+
+        }
+
+    }catch(error){
+
+        console.log("Sonido de cumpleaños no disponible:", error);
+
+    }
+
+}
 </script>
 
+
+
+<!-- ================================
+     OVERLAY: MENSAJE DE CUMPLEAÑOS
+================================ -->
+
+<div id="overlayCumple">
+
+    <div class="cumpleEmoji">🎂</div>
+
+    <div class="cumpleTexto" id="textoCumple"></div>
+
+    <button id="btnCumple" onclick="cerrarCumple()">CONTINUAR</button>
+
+</div>
 
 </body>
 
