@@ -639,6 +639,9 @@ body.conFoto #nombreAlumno{
 
     <div id="etiquetaQR">Coloca tu código QR frente a la cámara · Para tarjeta NFC, toca el ícono 🛜</div>
 
+    <!-- Estado del reconocimiento facial (solo con ?rostro=si) -->
+    <div id="estadoRostro" style="display:none; font-size:12px; color:#777; margin-top:6px; max-width:92%; cursor:pointer;"></div>
+
 <div id="estado" class="espera">
 Acerca tu tarjeta o muestra tu QR
 </div>
@@ -1774,6 +1777,333 @@ function reproducirSonidoCumple(){
 
     }
 
+}
+
+/*
+==================================================
+RECONOCIMIENTO FACIAL (SOLO CON ?rostro=si)
+==================================================
+Modo de prueba. Si la dirección NO termina en ?rostro=si, este bloque
+no hace nada y la página funciona exactamente igual que antes.
+
+Con ?rostro=si:
+ 1. Se carga la biblioteca de reconocimiento facial y sus modelos.
+ 2. Se piden al servidor las fotos de los alumnos vigentes y se calcula
+    una "huella" numérica de cada rostro. Las huellas viven solo en la
+    memoria de la página: no se guardan en el teléfono ni se envían.
+ 3. La cámara frontal (la misma del QR) busca rostros. Cuando uno
+    coincide claramente con un alumno, de forma estable, se registra su
+    asistencia con el mismo proceso del QR y el NFC (procesarIDAlumno).
+Añadiendo &debug=si se muestra en pantalla el ID más parecido y su
+distancia, para ajustar los valores de abajo.
+==================================================
+*/
+
+const PARAMS_ROSTRO = new URLSearchParams(window.location.search);
+const MODO_ROSTRO   = PARAMS_ROSTRO.get("rostro") === "si";
+const DEPURAR_ROSTRO = PARAMS_ROSTRO.get("debug") === "si";
+
+// ---------- AJUSTES (puede modificarlos) ----------
+// Distancia máxima para aceptar una coincidencia. Más baja = más estricto
+// (menos errores, pero a veces no reconoce). Valores típicos: 0.45 a 0.60.
+const ROSTRO_DISTANCIA_MAX = 0.50;
+// El mejor candidato debe ser al menos esto más parecido que el segundo.
+// Más alto = evita confundir hermanos o alumnos parecidos.
+const ROSTRO_MARGEN_MIN = 0.07;
+// Cuántas lecturas seguidas deben dar el mismo alumno antes de registrar.
+const ROSTRO_CUADROS_CONFIRMAR = 3;
+// Cada cuántos milisegundos se analiza la cámara.
+const ROSTRO_INTERVALO_MS = 350;
+// Tamaño mínimo del rostro (fracción del ancho de la imagen). Evita
+// registrar a quien está lejos, en la fila.
+const ROSTRO_TAMANO_MIN = 0.22;
+// Tiempo (ms) durante el cual no se vuelve a registrar al mismo alumno
+// por rostro, para que no vea "ya registró" si sigue frente a la cámara.
+const ROSTRO_ESPERA_MISMO_ALUMNO_MS = 60000;
+// Cuántas fotos se descargan al mismo tiempo al iniciar.
+const ROSTRO_FOTOS_SIMULTANEAS = 3;
+
+const FACEAPI_URL     = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js";
+const FACEAPI_MODELOS = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model";
+// --------------------------------------------------
+
+const estadoRostro = document.getElementById("estadoRostro");
+
+let baseRostros = [];          // [{id, nombre, descriptor}]
+let rostrosSinHuella = [];     // alumnos que no se pudieron usar
+let ocupadoRostro = false;
+let candidatoRostro = null;
+let aciertosRostro = 0;
+const ultimoRegistroRostro = {};   // id -> momento del último registro por rostro
+
+function mostrarEstadoRostro(texto){
+    estadoRostro.style.display = "block";
+    estadoRostro.textContent = texto;
+}
+
+function cargarScriptExterno(url){
+    return new Promise((resolver, rechazar)=>{
+        const tag = document.createElement("script");
+        tag.src = url;
+        tag.onload = resolver;
+        tag.onerror = ()=> rechazar(new Error("No se pudo cargar " + url));
+        document.head.appendChild(tag);
+    });
+}
+
+function cargarImagenDesdeURL(fuente){
+    return new Promise((resolver, rechazar)=>{
+        const img = new Image();
+        img.onload = ()=> resolver(img);
+        img.onerror = ()=> rechazar(new Error("Imagen no válida"));
+        img.src = fuente;
+    });
+}
+
+// Las detecciones se hacen de una en una para no saturar al teléfono
+let colaRostro = Promise.resolve();
+function enSerieRostro(tarea){
+    const p = colaRostro.then(tarea);
+    colaRostro = p.catch(()=>{});
+    return p;
+}
+
+function distanciaEuclidiana(a, b){
+    let suma = 0;
+    for(let i = 0; i < a.length; i++){
+        const d = a[i] - b[i];
+        suma += d * d;
+    }
+    return Math.sqrt(suma);
+}
+
+// Devuelve el alumno más parecido, su distancia y la del segundo más parecido
+function mejorCoincidencia(descriptor, base){
+    let mejor = null, d1 = Infinity, d2 = Infinity;
+    for(const alumno of base){
+        const d = distanciaEuclidiana(descriptor, alumno.descriptor);
+        if(d < d1){ d2 = d1; d1 = d; mejor = alumno; }
+        else if(d < d2){ d2 = d; }
+    }
+    return { alumno: mejor, distancia: d1, segunda: d2 };
+}
+
+function esCoincidenciaValida(r){
+    return r.alumno !== null &&
+           r.distancia <= ROSTRO_DISTANCIA_MAX &&
+           (r.segunda - r.distancia) >= ROSTRO_MARGEN_MIN;
+}
+
+function reiniciarConfirmacionRostro(){
+    candidatoRostro = null;
+    aciertosRostro = 0;
+}
+
+async function pedirAlServidor(cuerpo){
+    const respuesta = await fetch(URL_SCRIPT, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(cuerpo)
+    });
+    return respuesta.json();
+}
+
+async function iniciarReconocimientoFacial(){
+
+    etiquetaQR.textContent = "Mira a la cámara para registrar tu asistencia · o usa tu tarjeta / QR";
+    mostrarEstadoRostro("Cargando reconocimiento facial...");
+
+    try{
+
+        await cargarScriptExterno(FACEAPI_URL);
+
+        await faceapi.nets.tinyFaceDetector.loadFromUri(FACEAPI_MODELOS);
+        await faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACEAPI_MODELOS);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(FACEAPI_MODELOS);
+
+        const lista = await pedirAlServidor({ accion: "listaRostros" });
+
+        if(!lista || !lista.success || !lista.alumnos){
+            throw new Error("No se pudo obtener la lista de alumnos");
+        }
+
+        const alumnos = lista.alumnos;
+        let siguiente = 0, procesados = 0;
+
+        mostrarEstadoRostro("Preparando rostros 0/" + alumnos.length);
+
+        const trabajador = async ()=>{
+
+            while(siguiente < alumnos.length){
+
+                const alumno = alumnos[siguiente++];
+
+                try{
+
+                    const foto = await pedirAlServidor({ accion: "fotoAlumno", idAlumno: alumno.id });
+
+                    if(foto && foto.success && foto.foto){
+
+                        const img = await cargarImagenDesdeURL(foto.foto);
+
+                        const det = await enSerieRostro(()=>
+                            faceapi
+                              .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
+                              .withFaceLandmarks(true)
+                              .withFaceDescriptor()
+                        );
+
+                        if(det){
+                            baseRostros.push({ id: alumno.id, nombre: alumno.nombre, descriptor: det.descriptor });
+                        }else{
+                            rostrosSinHuella.push(alumno.nombre + " (no se detectó rostro en la foto)");
+                        }
+
+                    }else{
+                        rostrosSinHuella.push(alumno.nombre + " (sin foto en Drive)");
+                    }
+
+                }catch(error){
+                    console.log("Rostro no preparado:", alumno.id, error);
+                    rostrosSinHuella.push(alumno.nombre + " (error al preparar)");
+                }
+
+                procesados++;
+                mostrarEstadoRostro("Preparando rostros " + procesados + "/" + alumnos.length);
+
+            }
+
+        };
+
+        await Promise.all(Array.from({ length: ROSTRO_FOTOS_SIMULTANEAS }, trabajador));
+
+        let resumen = "Reconocimiento facial activo · " + baseRostros.length + " alumnos";
+
+        if(rostrosSinHuella.length > 0){
+            resumen += " · " + rostrosSinHuella.length + " sin rostro (toca para ver)";
+        }
+
+        mostrarEstadoRostro(resumen);
+
+        // Al tocar el texto se alterna entre el resumen y la lista de alumnos sin rostro
+        let verLista = false;
+        estadoRostro.onclick = ()=>{
+            verLista = !verLista;
+            estadoRostro.textContent = (verLista && rostrosSinHuella.length)
+                ? "Sin rostro: " + rostrosSinHuella.join(" · ")
+                : resumen;
+        };
+
+        if(rostrosSinHuella.length === 0 && !DEPURAR_ROSTRO){
+            setTimeout(()=>{ estadoRostro.style.display = "none"; }, 6000);
+        }
+
+        cicloRostro();
+
+    }catch(error){
+
+        console.error("Reconocimiento facial no disponible:", error);
+        mostrarEstadoRostro("Reconocimiento facial no disponible (el QR y el NFC siguen funcionando)");
+
+    }
+
+}
+
+async function analizarCuadroRostro(){
+
+    const opciones = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+
+    // Paso 1 (rápido): ¿hay algún rostro lo bastante grande?
+    const caras = await faceapi.detectAllFaces(videoQR, opciones);
+
+    if(caras.length === 0){ reiniciarConfirmacionRostro(); return; }
+
+    const mayor = caras.reduce((a, b)=> (b.box.width > a.box.width ? b : a));
+
+    if(mayor.box.width / videoQR.videoWidth < ROSTRO_TAMANO_MIN){
+        reiniciarConfirmacionRostro();
+        return;
+    }
+
+    // Paso 2: huella del rostro más grande
+    const completas = await faceapi
+        .detectAllFaces(videoQR, opciones)
+        .withFaceLandmarks(true)
+        .withFaceDescriptors();
+
+    if(completas.length === 0){ reiniciarConfirmacionRostro(); return; }
+
+    const principal = completas.reduce((a, b)=> (b.detection.box.width > a.detection.box.width ? b : a));
+
+    const resultado = mejorCoincidencia(principal.descriptor, baseRostros);
+
+    if(DEPURAR_ROSTRO){
+        mostrarEstadoRostro(
+            "ID más parecido: " + (resultado.alumno ? resultado.alumno.id : "-") +
+            " · distancia " + resultado.distancia.toFixed(2) +
+            " · segundo " + (isFinite(resultado.segunda) ? resultado.segunda.toFixed(2) : "-")
+        );
+    }
+
+    if(!esCoincidenciaValida(resultado)){ reiniciarConfirmacionRostro(); return; }
+
+    if(candidatoRostro === resultado.alumno.id){
+        aciertosRostro++;
+    }else{
+        candidatoRostro = resultado.alumno.id;
+        aciertosRostro = 1;
+    }
+
+    if(aciertosRostro < ROSTRO_CUADROS_CONFIRMAR) return;
+
+    // Se vuelve a revisar: durante el análisis pudo leerse una tarjeta o QR
+    if(bloqueado) return;
+
+    const id = resultado.alumno.id;
+    const ahora = Date.now();
+
+    reiniciarConfirmacionRostro();
+
+    // Ya se registró hace poco: no se repite mientras siga frente a la cámara
+    if(ahora - (ultimoRegistroRostro[id] || 0) < ROSTRO_ESPERA_MISMO_ALUMNO_MS) return;
+
+    ultimoRegistroRostro[id] = ahora;
+
+    bloqueado = true;
+
+    reproducirSonidoDeteccion();
+
+    procesarIDAlumno(id, false);
+
+}
+
+async function cicloRostro(){
+
+    try{
+
+        if(escaneando && !bloqueado && !ocupadoRostro &&
+           videoQR.readyState >= 2 && videoQR.videoWidth > 0 && baseRostros.length > 0){
+
+            ocupadoRostro = true;
+
+            await analizarCuadroRostro();
+
+        }
+
+    }catch(error){
+
+        console.log("Error al analizar el rostro:", error);
+
+    }
+
+    ocupadoRostro = false;
+
+    setTimeout(cicloRostro, ROSTRO_INTERVALO_MS);
+
+}
+
+if(MODO_ROSTRO){
+    iniciarReconocimientoFacial();
 }
 </script>
 
