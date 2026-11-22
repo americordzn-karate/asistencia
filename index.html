@@ -642,6 +642,11 @@ body.conFoto #nombreAlumno{
     <!-- Estado del reconocimiento facial (solo con ?rostro=si) -->
     <div id="estadoRostro" style="display:none; font-size:12px; color:#777; margin-top:6px; max-width:92%; cursor:pointer;"></div>
 
+    <!-- Barra de calidad de lectura del rostro (rojo = deficiente, verde = óptima) -->
+    <div id="barraRostro" style="display:none; width:60%; max-width:420px; height:10px; margin-top:8px; border-radius:6px; background:rgba(128,128,128,0.25); overflow:hidden;">
+        <div id="barraRostroRelleno" style="height:100%; width:0%; background:hsl(0,85%,48%); border-radius:6px; transition:width 0.25s ease, background-color 0.25s ease;"></div>
+    </div>
+
 <div id="estado" class="espera">
 Acerca tu tarjeta o muestra tu QR
 </div>
@@ -1836,6 +1841,31 @@ let candidatoRostro = null;
 let aciertosRostro = 0;
 const ultimoRegistroRostro = {};   // id -> momento del último registro por rostro
 
+// ---------- Barra de calidad de lectura ----------
+// 0 = rojo (sin lectura o deficiente) · 0.70 = punto en que ya se registra · 1 = verde (óptima)
+const barraRostro = document.getElementById("barraRostro");
+const barraRostroRelleno = document.getElementById("barraRostroRelleno");
+
+function calidadLectura(r){
+    const mitad = ROSTRO_DISTANCIA_MAX * 0.5;
+    let qDist = 1 - 0.3 * (r.distancia - mitad) / mitad;
+    qDist = Math.max(0, Math.min(1, qDist));
+    let qMargen = 1;
+    const margen = r.segunda - r.distancia;
+    if(isFinite(margen) && margen < ROSTRO_MARGEN_MIN){
+        qMargen = Math.max(0, 0.69 * margen / ROSTRO_MARGEN_MIN);
+    }
+    let q = Math.min(qDist, qMargen);
+    if(!esCoincidenciaValida(r)) q = Math.min(q, 0.69);
+    return q;
+}
+
+function actualizarBarraRostro(q){
+    q = Math.max(0, Math.min(1, q));
+    barraRostroRelleno.style.width = Math.max(q * 100, 3) + "%";
+    barraRostroRelleno.style.background = "hsl(" + Math.round(q * 120) + ",85%,45%)";
+}
+
 function mostrarEstadoRostro(texto){
     estadoRostro.style.display = "block";
     estadoRostro.textContent = texto;
@@ -1985,6 +2015,9 @@ async function iniciarReconocimientoFacial(){
 
         mostrarEstadoRostro(resumen);
 
+        actualizarBarraRostro(0);
+        barraRostro.style.display = "block";
+
         // Al tocar el texto se alterna entre el resumen y la lista de alumnos sin rostro
         let verLista = false;
         estadoRostro.onclick = ()=>{
@@ -2016,12 +2049,13 @@ async function analizarCuadroRostro(){
     // Paso 1 (rápido): ¿hay algún rostro lo bastante grande?
     const caras = await faceapi.detectAllFaces(videoQR, opciones);
 
-    if(caras.length === 0){ reiniciarConfirmacionRostro(); return; }
+    if(caras.length === 0){ reiniciarConfirmacionRostro(); actualizarBarraRostro(0); return; }
 
     const mayor = caras.reduce((a, b)=> (b.box.width > a.box.width ? b : a));
 
     if(mayor.box.width / videoQR.videoWidth < ROSTRO_TAMANO_MIN){
         reiniciarConfirmacionRostro();
+        actualizarBarraRostro(0.1);   // hay rostro pero lejos
         return;
     }
 
@@ -2031,11 +2065,13 @@ async function analizarCuadroRostro(){
         .withFaceLandmarks(true)
         .withFaceDescriptors();
 
-    if(completas.length === 0){ reiniciarConfirmacionRostro(); return; }
+    if(completas.length === 0){ reiniciarConfirmacionRostro(); actualizarBarraRostro(0.15); return; }
 
     const principal = completas.reduce((a, b)=> (b.detection.box.width > a.detection.box.width ? b : a));
 
     const resultado = mejorCoincidencia(principal.descriptor, baseRostros);
+
+    actualizarBarraRostro(calidadLectura(resultado));
 
     if(DEPURAR_ROSTRO){
         mostrarEstadoRostro(
