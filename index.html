@@ -647,6 +647,16 @@ body.conFoto #nombreAlumno{
         <div id="barraRostroRelleno" style="height:100%; width:0%; background:hsl(0,85%,48%); border-radius:6px; transition:width 0.25s ease, background-color 0.25s ease;"></div>
     </div>
 
+    <!-- Barra de carga de imágenes de alumnos (solo mientras se preparan los rostros) -->
+    <div id="barraCarga" style="display:none; width:85%; max-width:480px; margin-top:12px;">
+        <div id="barraCargaPista" style="position:relative; height:28px; border-radius:6px; border:1px solid #ffcc00; background:rgba(255,204,0,0.12); overflow:hidden;">
+            <div style="position:absolute; left:0; top:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:bold; letter-spacing:1px; color:#ffcc00; white-space:nowrap;">CARGANDO IMÁGENES DE ALUMNOS</div>
+            <div id="barraCargaRelleno" style="position:absolute; left:0; top:0; height:100%; width:0%; background:#ffcc00; overflow:hidden; transition:width 0.3s ease;">
+                <div id="barraCargaTextoOscuro" style="position:absolute; left:0; top:0; height:100%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:bold; letter-spacing:1px; color:#111; white-space:nowrap;">CARGANDO IMÁGENES DE ALUMNOS</div>
+            </div>
+        </div>
+    </div>
+
 <div id="estado" class="espera">
 Acerca tu tarjeta o muestra tu QR
 </div>
@@ -1938,18 +1948,43 @@ async function pedirAlServidor(cuerpo){
     return respuesta.json();
 }
 
+// ---------- Barra de carga de imágenes de alumnos ----------
+const barraCarga = document.getElementById("barraCarga");
+const barraCargaPista = document.getElementById("barraCargaPista");
+const barraCargaRelleno = document.getElementById("barraCargaRelleno");
+const barraCargaTextoOscuro = document.getElementById("barraCargaTextoOscuro");
+
+function actualizarBarraCarga(fraccion){
+    fraccion = Math.max(0, Math.min(1, fraccion));
+    barraCargaRelleno.style.width = (fraccion * 100) + "%";
+    // El texto oscuro mide lo mismo que la barra completa, para que se lea sobre el amarillo
+    barraCargaTextoOscuro.style.width = barraCargaPista.clientWidth + "px";
+}
+
+function mostrarBarraCarga(){
+    barraCarga.style.display = "block";
+    actualizarBarraCarga(0);
+}
+
+function ocultarBarraCarga(){
+    barraCarga.style.display = "none";
+}
+
 async function iniciarReconocimientoFacial(){
 
     etiquetaQR.textContent = "Mira a la cámara para registrar tu asistencia · o usa tu tarjeta / QR";
     mostrarEstadoRostro("Cargando reconocimiento facial...");
+    mostrarBarraCarga();
 
     try{
 
         await cargarScriptExterno(FACEAPI_URL);
+        actualizarBarraCarga(0.05);
 
         await faceapi.nets.tinyFaceDetector.loadFromUri(FACEAPI_MODELOS);
         await faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACEAPI_MODELOS);
         await faceapi.nets.faceRecognitionNet.loadFromUri(FACEAPI_MODELOS);
+        actualizarBarraCarga(0.15);
 
         const lista = await pedirAlServidor({ accion: "listaRostros" });
 
@@ -1959,6 +1994,7 @@ async function iniciarReconocimientoFacial(){
 
         const alumnos = lista.alumnos;
         let siguiente = 0, procesados = 0;
+        actualizarBarraCarga(0.18);
 
         mostrarEstadoRostro("Preparando rostros 0/" + alumnos.length);
 
@@ -2000,12 +2036,16 @@ async function iniciarReconocimientoFacial(){
 
                 procesados++;
                 mostrarEstadoRostro("Preparando rostros " + procesados + "/" + alumnos.length);
+                actualizarBarraCarga(0.18 + 0.82 * (procesados / alumnos.length));
 
             }
 
         };
 
         await Promise.all(Array.from({ length: ROSTRO_FOTOS_SIMULTANEAS }, trabajador));
+
+        actualizarBarraCarga(1);
+        setTimeout(ocultarBarraCarga, 700);
 
         let resumen = "Reconocimiento facial activo · " + baseRostros.length + " alumnos";
 
@@ -2036,6 +2076,7 @@ async function iniciarReconocimientoFacial(){
     }catch(error){
 
         console.error("Reconocimiento facial no disponible:", error);
+        ocultarBarraCarga();
         mostrarEstadoRostro("Reconocimiento facial no disponible (el QR y el NFC siguen funcionando)");
 
     }
